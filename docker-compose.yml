@@ -1,0 +1,88 @@
+name: voxrag
+
+services:
+  qdrant:
+    image: qdrant/qdrant:v1.13.0
+    container_name: voxrag-qdrant
+    restart: unless-stopped
+    ports:
+      - '6333:6333' # REST + dashboard at http://localhost:6333/dashboard
+      - '6334:6334' # gRPC
+    volumes:
+      - qdrant-storage:/qdrant/storage
+    environment:
+      QDRANT__SERVICE__API_KEY: ${QDRANT_API_KEY:-}
+      QDRANT__LOG_LEVEL: INFO
+    healthcheck:
+      # The Qdrant image is distroless — no curl/wget — so probe over its own
+      # TCP port with bash's /dev/tcp instead.
+      test: ['CMD-SHELL', 'timeout 3 bash -c "</dev/tcp/localhost/6333" || exit 1']
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  server:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    container_name: voxrag-server
+    restart: unless-stopped
+    ports:
+      - '${PORT:-8787}:8787'
+    depends_on:
+      qdrant:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 8787
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173,http://localhost:8080}
+
+      NVIDIA_API_KEY: ${NVIDIA_API_KEY:?NVIDIA_API_KEY is required}
+      NVIDIA_BASE_URL: ${NVIDIA_BASE_URL:-https://integrate.api.nvidia.com/v1}
+      NVIDIA_MODEL: ${NVIDIA_MODEL:-nvidia/nemotron-3-ultra-550b-a55b}
+      ELEVENLABS_API_KEY: ${ELEVENLABS_API_KEY:-}
+
+      # Inside Compose, Qdrant is always reachable — require it rather than
+      # silently falling back to the embedded store.
+      VECTOR_STORE: qdrant
+      QDRANT_URL: http://qdrant:6333
+      QDRANT_API_KEY: ${QDRANT_API_KEY:-}
+      QDRANT_COLLECTION: ${QDRANT_COLLECTION:-voxrag_msmarco_xi}
+
+      # Hosted embeddings by default in containers: the local ONNX path needs a
+      # ~550MB download and is CPU-bound, which makes cold starts painful.
+      # Set EMBEDDING_PROVIDER=local to run BGE-M3 in-process instead.
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-nvidia}
+      EMBEDDING_DIMENSIONS: ${EMBEDDING_DIMENSIONS:-1024}
+      RERANKER_PROVIDER: ${RERANKER_PROVIDER:-heuristic}
+
+      DATASET_SOURCE: ${DATASET_SOURCE:-auto}
+      DATASET_MAX_ROWS: ${DATASET_MAX_ROWS:-300}
+      DATASET_LANGUAGES: ${DATASET_LANGUAGES:-hin_Deva}
+    volumes:
+      - model-cache:/app/models
+      - dataset-cache:/app/dataset
+      - server-storage:/app/storage
+
+  client:
+    build:
+      context: .
+      dockerfile: client/Dockerfile
+      args:
+        # Empty means same-origin; set to the public API URL when the frontend
+        # is served from a different host than the API.
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8787}
+    container_name: voxrag-client
+    restart: unless-stopped
+    ports:
+      - '${CLIENT_PORT:-8080}:80'
+    depends_on:
+      - server
+
+volumes:
+  qdrant-storage:
+  model-cache:
+  dataset-cache:
+  server-storage:

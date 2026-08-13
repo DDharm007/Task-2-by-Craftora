@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light" />
+    <meta
+      name="description"
+      content="GoaRAG — voice-driven retrieval-augmented generation over MSMARCO-XI, with hybrid retrieval, cross-encoder reranking and guardrails."
+    />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="48x48" href="/favicon-48.png" />
+    <link rel="icon" type="image/png" sizes="64x64" href="/favicon-64.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Yatra+One&display=swap" rel="stylesheet">
+    <meta id="theme-color-meta" name="theme-color" content="#FFFFFF" />
+    <title>GoaRAG</title>
+    <script>
+      // Applies a saved Dark/Exclusive choice before first paint, so a
+      // returning visitor never sees a flash of the Light theme. Deliberately
+      // synchronous and inline — a module script loaded alongside React would
+      // run after the browser has already painted the default styles once.
+      (function () {
+        try {
+          var theme = localStorage.getItem('goarag:theme');
+          var colors = { light: '#FFFFFF', dark: '#0B0D10', exclusive: '#036735' };
+          if (theme === 'dark' || theme === 'exclusive') {
+            document.documentElement.setAttribute('data-theme', theme);
+          }
+          var meta = document.getElementById('theme-color-meta');
+          if (meta) meta.setAttribute('content', colors[theme] || colors.light);
+        } catch (e) {
+          // Storage can throw in locked-down contexts (private mode, embedded
+          // iframes with storage partitioning) — Light is a fine fallback.
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

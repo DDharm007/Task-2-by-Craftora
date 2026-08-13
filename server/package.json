@@ -1,0 +1,46 @@
+{
+  "name": "@voxrag/server",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "scripts": {
+    "dev": "tsx watch --clear-screen=false src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "dataset:download": "tsx src/scripts/download-dataset.ts",
+    "index": "tsx src/scripts/index-dataset.ts",
+    "index:reset": "tsx src/scripts/index-dataset.ts --reset",
+    "benchmark": "tsx src/scripts/run-benchmark.ts",
+    "verify": "tsx src/scripts/verify.ts"
+  },
+  "dependencies": {
+    "@huggingface/hub": "^2.15.0",
+    "@huggingface/transformers": "^3.3.3",
+    "@qdrant/js-client-rest": "^1.13.0",
+    "@voxrag/shared": "*",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "express-rate-limit": "^7.5.0",
+    "helmet": "^8.0.0",
+    "hyparquet": "^1.28.1",
+    "multer": "^2.2.0",
+    "nanoid": "^5.0.9",
+    "openai": "^4.80.1",
+    "p-limit": "^6.2.0",
+    "pino": "^9.6.0",
+    "pino-http": "^10.4.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/multer": "^1.4.12",
+    "@types/node": "^22.10.7",
+    "pino-pretty": "^13.0.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
+  }
+}

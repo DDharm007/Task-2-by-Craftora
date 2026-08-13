@@ -1,0 +1,221 @@
+/* Poppins has no variable build upstream, so each weight actually used in the
+   UI is imported individually rather than pulling the whole static family. */
+@import '@fontsource/poppins/400.css';
+@import '@fontsource/poppins/500.css';
+@import '@fontsource/poppins/600.css';
+@import '@fontsource/poppins/700.css';
+@import '@fontsource/jetbrains-mono/400.css';
+@import '@fontsource/jetbrains-mono/500.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/**
+ * Theme tokens.
+ *
+ * Every colour Tailwind resolves to `rgb(var(--x) / <alpha-value>)` (see
+ * tailwind.config.ts), so a token is a plain "R G B" triplet, not a hex
+ * string — that space-separated form is what lets Tailwind's opacity
+ * modifiers (`bg-canvas/95`) slice in an alpha channel at use-site.
+ *
+ * `:root` is Light — the default, and the only theme that needs no
+ * `data-theme` attribute (the inline bootstrap script in index.html sets the
+ * attribute *before* paint for anything else, so switching themes on reload
+ * never flashes light first).
+ */
+:root {
+  --canvas: 255 255 255;
+  --subtle: 250 250 250;
+  --card: 255 255 255;
+  --border: 229 231 235;
+  --border-strong: 209 213 219;
+  --ink: 17 24 39;
+  --ink-secondary: 107 114 128;
+  --ink-tertiary: 156 163 175;
+  --accent: 17 24 39;
+  --accent-hover: 31 41 55;
+  --success: 22 163 74;
+  --success-subtle: 240 253 244;
+  --success-border: 187 247 208;
+  --warning: 217 119 6;
+  --warning-subtle: 255 251 235;
+  --warning-border: 253 230 138;
+  --danger: 220 38 38;
+  --danger-subtle: 254 242 242;
+  --danger-border: 254 202 202;
+  /** Recording waveform fill. Same as ink by default — a distinct token only
+      so Exclusive can hand it the brand yellow without waveform code needing
+      to know which theme is active. */
+  --waveform: 17 24 39;
+}
+
+/* Dark — a conventional low-glare dark surface, accent picked up in blue since
+   an ink-black accent tile would disappear against an already-dark canvas. */
+[data-theme='dark'] {
+  --canvas: 11 13 16;
+  --subtle: 19 22 25;
+  --card: 21 24 28;
+  --border: 38 43 49;
+  --border-strong: 54 60 68;
+  --ink: 243 244 246;
+  --ink-secondary: 156 163 175;
+  --ink-tertiary: 107 114 128;
+  --accent: 47 111 237;
+  --accent-hover: 76 134 245;
+  --success: 34 197 94;
+  --success-subtle: 11 46 27;
+  --success-border: 28 82 51;
+  --warning: 245 158 11;
+  --warning-subtle: 58 42 5;
+  --warning-border: 92 67 16;
+  --danger: 248 113 113;
+  --danger-subtle: 58 20 20;
+  --danger-border: 92 34 34;
+  --waveform: 243 244 246;
+}
+
+/* HHGoa'26 Exclusive — built directly from the three brand colours: deep
+   green as the immersive canvas, hot pink carrying every clickable action,
+   and the bright yellow doing double duty as the warning hue so it isn't
+   just decorative. Supporting neutrals are new (the brand only specified
+   three colours) but every one of the three appears exactly as given. */
+[data-theme='exclusive'] {
+  --canvas: 3 103 53; /* #036735 */
+  --subtle: 2 79 40;
+  --card: 11 122 64;
+  --border: 46 145 96;
+  --border-strong: 70 168 118;
+  --ink: 247 251 244;
+  --ink-secondary: 185 217 198;
+  --ink-tertiary: 127 175 149;
+  --accent: 255 0 128; /* #FF0080 */
+  --accent-hover: 255 77 166;
+  --success: 74 222 128;
+  --success-subtle: 6 56 30;
+  --success-border: 18 101 58;
+  --warning: 254 225 1; /* #FEE101 */
+  --warning-subtle: 61 51 0;
+  --warning-border: 107 90 0;
+  --danger: 255 71 87;
+  --danger-subtle: 61 14 20;
+  --danger-border: 107 27 38;
+  --waveform: 254 225 1; /* #FEE101 — the recording bars read as yellow */
+}
+
+/**
+ * Exclusive-only glass treatment.
+ *
+ * `<AmbientGlow>` paints two drifting blue/red lights behind everything;
+ * without a translucent, blurred surface for them to show through, they'd
+ * just be lights behind opaque cards — invisible. This is the other half of
+ * that effect, and why the two only make sense shipped together. Every
+ * surface built from the `Card` component picks this up automatically
+ * because it targets the `bg-card` utility itself, at higher specificity
+ * than Tailwind's own rule for it — no per-component change needed.
+ */
+[data-theme='exclusive'] .bg-card {
+  background-color: rgb(var(--card) / 0.55);
+  backdrop-filter: blur(20px) saturate(150%);
+  -webkit-backdrop-filter: blur(20px) saturate(150%);
+}
+
+[data-theme='exclusive'] .border-border {
+  border-color: rgb(var(--border) / 0.55);
+}
+
+@layer base {
+  :root {
+    color-scheme: light;
+    /* Tabular numerals everywhere: latency and score readouts update live,
+       and proportional digits make the numbers jitter as they change. */
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  }
+
+  /* Dark and Exclusive are both dark surfaces — native form controls and
+     scrollbars should render in their dark variant, not fight the page. */
+  [data-theme='dark'],
+  [data-theme='exclusive'] {
+    color-scheme: dark;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-canvas text-ink antialiased;
+    font-synthesis-weight: none;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* A visible, consistent focus ring — keyboard navigation is a first-class
+     path in a developer tool, not an afterthought. */
+  :focus-visible {
+    @apply outline-none ring-2 ring-ink/80 ring-offset-2 ring-offset-canvas;
+  }
+
+  ::selection {
+    @apply bg-ink/10;
+  }
+
+  /* Slim scrollbars that match the surface rather than the OS default. */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply rounded-full border-[3px] border-solid border-transparent bg-border-strong bg-clip-content;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-ink-tertiary bg-clip-content;
+  }
+}
+
+@layer components {
+  /* Card: the single surface primitive. One border, no shadow by default. */
+  .card {
+    @apply rounded-lg border border-border bg-card;
+  }
+
+  .card-padded {
+    @apply card p-4;
+  }
+
+  /* Section label: small, uppercase, wide-tracked. */
+  .label {
+    @apply text-2xs font-medium uppercase tracking-wider text-ink-secondary;
+  }
+
+  .mono {
+    @apply font-mono text-xs;
+  }
+}
+
+@layer utilities {
+  /* Respect the OS reduced-motion setting: every animation here is
+     decorative, so removing it costs nothing and helps people who need it. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}

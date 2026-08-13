@@ -1,0 +1,47 @@
+# dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# secrets — never commit
+.env
+.env.local
+.env.*.local
+*.pem
+.keys.tmp
+
+# build output
+dist/
+build/
+*.tsbuildinfo
+.vite/
+
+# dataset + generated artifacts (large, regenerable)
+dataset/raw/
+dataset/processed/
+dataset/*.jsonl
+dataset/*.parquet
+uploads/*
+!uploads/.gitkeep
+
+# local vector store + model cache
+.cache/
+storage/
+models/
+
+# logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# benchmark output
+docs/benchmarks/*.json
+
+# editor / OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
