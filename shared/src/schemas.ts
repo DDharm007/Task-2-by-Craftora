@@ -42,7 +42,7 @@ export const retrievalOptionsSchema = z
     enableRerank: z.boolean().optional(),
     enableMmr: z.boolean().optional(),
     enableParentExpansion: z.boolean().optional(),
-    /** Turn on Nemotron's reasoning mode (much slower, shows chain-of-thought). */
+    /** Turn on the model's reasoning mode (much slower, shows chain-of-thought). */
     enableThinking: z.boolean().optional(),
     /** Skip generation and return retrieval only — used by the chunk inspector. */
     retrievalOnly: z.boolean().optional(),

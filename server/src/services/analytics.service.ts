@@ -16,7 +16,7 @@ import type {
   RequestLogEntry,
   StageLatencyStats,
   TokenUsage,
-} from '@voxrag/shared';
+} from '@goarag/shared';
 
 /** How many requests to retain. Enough for meaningful percentiles, bounded memory. */
 const MAX_ENTRIES = 1_000;

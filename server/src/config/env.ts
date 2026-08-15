@@ -83,12 +83,12 @@ const envSchema = z.object({
   // Groq (LLM generation)
   GROQ_API_KEY: z.string().trim().min(1, 'GROQ_API_KEY is required'),
   GROQ_BASE_URL: stringWithDefault('https://api.groq.com/openai/v1'),
-  GROQ_MODEL: stringWithDefault('llama-3.3-70b-versatile'),
+  GROQ_MODEL: stringWithDefault('openai/gpt-oss-120b'),
   // `reasoning_budget` and `chat_template_kwargs.enable_thinking` (sent when
-  // this is on — see llm.service.ts) are NVIDIA NIM/Nemotron-specific request
-  // fields. Groq's OpenAI-compatible endpoint rejects them outright with a
-  // 400, so this must stay `false` unless GROQ_MODEL is pointed at a NIM
-  // deployment instead.
+  // this is on — see llm.service.ts) are extensions only some gateways accept.
+  // Groq's OpenAI-compatible endpoint rejects them outright with a 400, so this
+  // must stay `false` unless GROQ_BASE_URL points at a gateway that supports
+  // them.
   LLM_ENABLE_THINKING: booleanish(false),
   LLM_TEMPERATURE: floatWithDefault(0.2, 0, 2),
   LLM_TOP_P: floatWithDefault(0.95, 0, 1),
@@ -122,22 +122,17 @@ const envSchema = z.object({
   MAX_AUDIO_UPLOAD_MB: intWithDefault(25, 1, 200),
 
   // Embeddings
-  EMBEDDING_PROVIDER: z.enum(['local', 'nvidia']).default('local'),
+  EMBEDDING_PROVIDER: z.enum(['local']).default('local'),
   EMBEDDING_MODEL: stringWithDefault('BAAI/bge-m3'),
   EMBEDDING_DIMENSIONS: intWithDefault(1024, 64, 8192),
   EMBEDDING_BATCH_SIZE: intWithDefault(8, 1, 256),
   EMBEDDING_MAX_TOKENS: intWithDefault(512, 64, 8192),
   EMBEDDING_QUANTIZATION: z.enum(['fp32', 'fp16', 'int8', 'uint8', 'q4', 'q4f16']).default('int8'),
-  // A separate, genuinely-NVIDIA path (EMBEDDING_PROVIDER=nvidia), independent
-  // of whichever provider GROQ_* configures for chat generation — the two
-  // used to share credentials via config.llm, which broke the moment the LLM
-  // endpoint pointed somewhere that isn't NVIDIA NIM.
-  NVIDIA_EMBEDDING_MODEL: stringWithDefault('nvidia/nv-embedqa-e5-v5'),
-  NVIDIA_EMBEDDING_API_KEY: z.string().trim().default(''),
-  NVIDIA_EMBEDDING_BASE_URL: stringWithDefault('https://integrate.api.nvidia.com/v1'),
 
   // Reranker
-  RERANKER_PROVIDER: z.enum(['local', 'heuristic']).default('local'),
+  // `heuristic` by default: the cross-encoder costs ~1.55s at p50 on CPU,
+  // which dominates the latency budget. See .env.example for measured numbers.
+  RERANKER_PROVIDER: z.enum(['local', 'heuristic']).default('heuristic'),
   RERANKER_MODEL: stringWithDefault('Xenova/bge-reranker-base'),
   RERANKER_QUANTIZATION: z.enum(['fp32', 'fp16', 'int8', 'uint8', 'q4', 'q4f16']).default('int8'),
   RERANK_BATCH_SIZE: intWithDefault(4, 1, 32),
@@ -146,7 +141,7 @@ const envSchema = z.object({
   VECTOR_STORE: z.enum(['qdrant', 'embedded', 'auto']).default('auto'),
   QDRANT_URL: stringWithDefault('http://localhost:6333'),
   QDRANT_API_KEY: z.string().trim().default(''),
-  QDRANT_COLLECTION: stringWithDefault('voxrag_msmarco_xi'),
+  QDRANT_COLLECTION: stringWithDefault('goarag_msmarco_xi'),
   EMBEDDED_STORE_PATH: stringWithDefault('./storage/vectors'),
 
   // Retrieval
@@ -267,9 +262,6 @@ export const config = {
     batchSize: env.EMBEDDING_BATCH_SIZE,
     maxTokens: env.EMBEDDING_MAX_TOKENS,
     quantization: env.EMBEDDING_QUANTIZATION,
-    nvidiaModel: env.NVIDIA_EMBEDDING_MODEL,
-    nvidiaApiKey: env.NVIDIA_EMBEDDING_API_KEY,
-    nvidiaBaseUrl: env.NVIDIA_EMBEDDING_BASE_URL,
     cacheDir: resolveFromRoot('./models'),
   },
 
@@ -346,7 +338,7 @@ export function redactedConfig(): Record<string, unknown> {
     llm: { ...config.llm, apiKey: mask(config.llm.apiKey) },
     stt: { ...config.stt, apiKey: mask(config.stt.apiKey) },
     tts: { ...config.tts, apiKey: mask(config.tts.apiKey) },
-    embedding: { ...config.embedding, nvidiaApiKey: mask(config.embedding.nvidiaApiKey) },
+    embedding: config.embedding,
     reranker: config.reranker,
     vectorStore: { ...config.vectorStore, qdrantApiKey: mask(config.vectorStore.qdrantApiKey) },
     retrieval: config.retrieval,

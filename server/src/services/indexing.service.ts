@@ -10,7 +10,7 @@
  * pipelined with bounded concurrency: while one batch is in the model, the
  * previous batch is being written to the store.
  */
-import type { ChunkStrategy, IndexStats } from '@voxrag/shared';
+import type { ChunkStrategy, IndexStats } from '@goarag/shared';
 import { config } from '../config/env.js';
 import { logger } from '../utils/logger.js';
 import { chunkArray, mapWithConcurrency, now } from '../utils/async.js';

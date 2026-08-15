@@ -17,7 +17,7 @@ import {
   YAxis,
 } from 'recharts';
 import { Activity, Play, Target, Timer, Coins, Gauge } from 'lucide-react';
-import type { BenchmarkResult, LatencyPercentiles, StageLatencyStats } from '@voxrag/shared';
+import type { BenchmarkResult, LatencyPercentiles, StageLatencyStats } from '@goarag/shared';
 import { fetchStats, runBenchmark } from '@/lib/api';
 import { formatMs, formatNumber, formatPercent, themeColor } from '@/lib/utils';
 import { useTheme } from '@/hooks/useTheme';
@@ -121,7 +121,7 @@ function QualityCard({ result }: { result: BenchmarkResult }) {
                   {formatPercent(metric.value, 1)}
                 </span>
               </div>
-              <Meter value={metric.value} tone="neutral" className="mt-1 h-1" />
+              <Meter value={metric.value} className="mt-1 h-1" />
             </div>
           </Tooltip>
         ))}

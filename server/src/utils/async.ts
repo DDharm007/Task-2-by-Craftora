@@ -101,7 +101,7 @@ export interface RetryOptions {
 
 /**
  * Retry with exponential backoff and full jitter.
- * Jitter matters here — without it, a transient NIM outage causes every
+ * Jitter matters here — without it, a transient upstream outage causes every
  * in-flight request to retry in lockstep and re-trigger the same rate limit.
  */
 export async function retry<T>(fn: (attempt: number) => Promise<T>, options: RetryOptions): Promise<T> {

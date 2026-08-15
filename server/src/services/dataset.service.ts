@@ -33,7 +33,7 @@ import { pipeline } from 'node:stream/promises';
 import path from 'node:path';
 import { downloadFile, listFiles } from '@huggingface/hub';
 import { asyncBufferFromFile, parquetMetadataAsync, parquetReadObjects } from 'hyparquet';
-import type { SourceDocument } from '@voxrag/shared';
+import type { SourceDocument } from '@goarag/shared';
 import { config } from '../config/env.js';
 import { logger } from '../utils/logger.js';
 import { retry, withTimeout } from '../utils/async.js';

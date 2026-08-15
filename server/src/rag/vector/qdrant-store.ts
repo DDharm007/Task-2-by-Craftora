@@ -13,7 +13,7 @@
  * Qdrant falls back to a full scan once the collection grows.
  */
 import { QdrantClient } from '@qdrant/js-client-rest';
-import type { ChunkMetadata, ChunkStrategy } from '@voxrag/shared';
+import type { ChunkMetadata, ChunkStrategy } from '@goarag/shared';
 import { config } from '../../config/env.js';
 import { logger } from '../../utils/logger.js';
 import { chunkArray, retry, withTimeout } from '../../utils/async.js';

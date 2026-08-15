@@ -71,7 +71,7 @@ export function createApp(): Express {
 
   app.get('/', (_req, res) => {
     res.json({
-      name: 'VoxRAG API',
+      name: 'GoaRAG API',
       version: config.version,
       docs: '/api/health',
       endpoints: [

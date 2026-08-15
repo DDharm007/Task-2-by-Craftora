@@ -10,7 +10,7 @@ import {
   queryRequestSchema,
   speakRequestSchema,
   statsQuerySchema,
-} from '@voxrag/shared';
+} from '@goarag/shared';
 import {
   asyncHandler,
   audioUpload,

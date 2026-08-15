@@ -329,7 +329,7 @@ export function ConsolePage() {
                   />
                   <Switch
                     label="Reasoning mode"
-                    description="Nemotron thinks first — much slower"
+                    description="The model reasons first — much slower"
                     checked={options.enableThinking ?? false}
                     onCheckedChange={(value) => setOptions({ enableThinking: value })}
                   />

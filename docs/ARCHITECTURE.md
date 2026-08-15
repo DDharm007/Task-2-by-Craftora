@@ -1,6 +1,6 @@
 # Architecture
 
-Why each part of VoxRAG is built the way it is. The README covers *what* the system does; this
+Why each part of GoaRAG is built the way it is. The README covers *what* the system does; this
 document covers *why*, including the decisions that went the other way first.
 
 ---
@@ -22,17 +22,17 @@ Three subsystems have two implementations each, behind one interface:
 
 | Subsystem | Primary | Alternative | Selected by |
 | --- | --- | --- | --- |
-| Embeddings | `BAAI/bge-m3` via ONNX, in-process | NVIDIA NIM hosted | `EMBEDDING_PROVIDER` |
+| Embeddings | `BAAI/bge-m3` via ONNX, in-process | — | `EMBEDDING_PROVIDER` |
 | Vector store | Qdrant | Disk-persisted embedded store | `VECTOR_STORE` |
-| Reranker | `bge-reranker-base` cross-encoder | Lexical coverage + proximity | `RERANKER_PROVIDER` |
+| Reranker | Lexical coverage + proximity | `bge-reranker-base` cross-encoder | `RERANKER_PROVIDER` |
 
 This is not indecision. Each pair covers a real deployment split:
 
-- **Embeddings.** NVIDIA lists `baai/bge-m3` in `/v1/models`, but the NIM returns HTTP 500 for
-  every request shape tried (array input, string input, with and without `input_type`/`truncate`).
-  Running BGE-M3 locally is therefore both the spec-faithful option *and* the working one. The
-  hosted provider uses `nvidia/nv-embedqa-e5-v5`, which is also 1024-dimensional and so requires
-  no schema change to swap.
+- **Embeddings.** BGE-M3 runs in-process via ONNX Runtime: no embedding API, no key, no
+  per-query cost, and no network hop on the hot path. It is the single provider, because the
+  index is only valid for the model that built it — swapping the embedding model silently
+  invalidates every stored vector rather than failing loudly (both candidates were 1024-dim,
+  so the dimension check would not have caught it).
 
 - **Vector store.** Qdrant is the production target and the only one used when
   `VECTOR_STORE=qdrant`. The embedded driver exists so the full pipeline runs with no external

@@ -6,9 +6,9 @@
  * it did without going looking.
  */
 import { Activity, Check, Gauge, ShieldCheck, TriangleAlert, X, Timer } from 'lucide-react';
-import type { ConfidenceBreakdown, GuardrailReport, GuardrailResult, LatencyBreakdown } from '@voxrag/shared';
-import { GUARDRAIL_LABELS } from '@voxrag/shared';
-import { cn, formatMs, formatPercent, scoreTone } from '@/lib/utils';
+import type { ConfidenceBreakdown, GuardrailReport, GuardrailResult, LatencyBreakdown } from '@goarag/shared';
+import { GUARDRAIL_LABELS } from '@goarag/shared';
+import { cn, formatMs, formatPercent } from '@/lib/utils';
 import { Card, CardHeader, CardContent } from '@/components/ui/card';
 import { Badge, KeyValue, Meter, Tooltip } from '@/components/ui/primitives';
 
@@ -134,8 +134,6 @@ const CONFIDENCE_FACTORS: Array<{
 ];
 
 export function ConfidencePanel({ confidence }: { confidence: ConfidenceBreakdown | null }) {
-  const tone = confidence ? scoreTone(confidence.overall) : 'neutral';
-
   return (
     <Card>
       <CardHeader
@@ -169,7 +167,10 @@ export function ConfidencePanel({ confidence }: { confidence: ConfidenceBreakdow
                   {formatPercent(confidence.overall, 1)}
                 </span>
               </div>
-              <Meter value={confidence.overall} tone={tone === 'neutral' ? 'success' : tone} />
+              {/* Spectrum, not the verdict tone: whether the threshold cleared
+                  is already stated twice above (badge + header description),
+                  so the bar is free to report the magnitude instead. */}
+              <Meter value={confidence.overall} />
             </div>
 
             <div className="space-y-2 border-t border-border pt-2">
@@ -185,7 +186,7 @@ export function ConfidencePanel({ confidence }: { confidence: ConfidenceBreakdow
                         </span>
                         <span className="font-mono text-2xs text-ink">{value.toFixed(3)}</span>
                       </div>
-                      <Meter value={value} tone="neutral" className="mt-1 h-1" />
+                      <Meter value={value} className="mt-1 h-1" />
                     </div>
                   </Tooltip>
                 );

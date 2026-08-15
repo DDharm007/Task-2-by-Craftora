@@ -25,9 +25,7 @@ RUN npm prune --omit=dev --workspace shared --workspace server --include-workspa
 FROM node:22-slim AS runtime
 
 ENV NODE_ENV=production \
-    PORT=8787 \
-    # Keep model weights on a writable volume rather than the image layer.
-    EMBEDDING_PROVIDER=nvidia
+    PORT=8787
 
 WORKDIR /app
 
@@ -43,11 +41,15 @@ COPY --from=build --chown=node:node /app/shared/dist ./shared/dist
 COPY --from=build --chown=node:node /app/shared/package.json ./shared/package.json
 COPY --from=build --chown=node:node /app/server/dist ./server/dist
 COPY --from=build --chown=node:node /app/server/package.json ./server/package.json
-COPY --from=build --chown=node:node /app/server/node_modules ./server/node_modules
 
 # Writable mount points for the local vector store, model cache and dataset.
 RUN mkdir -p /app/storage /app/models /app/dataset /app/uploads \
  && chown -R node:node /app/storage /app/models /app/dataset /app/uploads
+
+# The prebuilt index, straight from the build context. Without it the embedded
+# store loads zero vectors and every query retrieves nothing — the container
+# filesystem is ephemeral, so there is nothing to index into at runtime.
+COPY --chown=node:node storage/vectors /app/storage/vectors
 
 USER node
 

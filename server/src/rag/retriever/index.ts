@@ -19,8 +19,8 @@
  * the embedding forward pass, the sparse arm by an inverted-index walk, and
  * neither depends on the other's output.
  */
-import type { RetrievedChunk } from '@voxrag/shared';
-import type { RetrievalOptions } from '@voxrag/shared';
+import type { RetrievedChunk } from '@goarag/shared';
+import type { RetrievalOptions } from '@goarag/shared';
 import { config } from '../../config/env.js';
 import { logger } from '../../utils/logger.js';
 import { StageTimer, timed } from '../../utils/async.js';

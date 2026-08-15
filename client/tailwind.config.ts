@@ -3,10 +3,15 @@ import type { Config } from 'tailwindcss';
 /**
  * Design tokens.
  *
- * A restrained, developer-tool palette: near-white surfaces, one neutral ink
- * for text and primary actions, and colour reserved exclusively for state
- * (success / warning / error). No gradients, no accent hues used decoratively
- * — if something is coloured here, it means something.
+ * A restrained instrument-panel palette: blue-shifted neutral surfaces, one
+ * deep ultramarine accent for primary actions, and colour otherwise reserved
+ * for state (success / warning / error).
+ *
+ * There is exactly one gradient in the system — the evidence spectrum defined
+ * in styles/index.css — and it is a readout, not an ornament: every 0-1
+ * confidence the app reports is painted on that shared ramp, so a colour means
+ * the same thing in every panel. Outside of it, surfaces are flat. If
+ * something is coloured here, it means something.
  */
 /**
  * Every colour below is `rgb(var(--x) / <alpha-value>)`, not a literal hex —

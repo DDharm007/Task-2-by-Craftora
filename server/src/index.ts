@@ -18,7 +18,7 @@ const app = createApp();
 const server = app.listen(config.port, () => {
   logger.info(
     { port: config.port, env: config.env, cors: config.corsOrigins },
-    `VoxRAG API listening on http://localhost:${config.port}`,
+    `GoaRAG API listening on http://localhost:${config.port}`,
   );
   if (config.isDev) logger.debug({ config: redactedConfig() }, 'Effective configuration');
 });

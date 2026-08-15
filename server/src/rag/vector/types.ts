@@ -1,5 +1,5 @@
 /** The storage contract shared by the Qdrant and embedded drivers. */
-import type { ChunkMetadata, ChunkStrategy } from '@voxrag/shared';
+import type { ChunkMetadata, ChunkStrategy } from '@goarag/shared';
 import type { SparseVector } from './bm25.js';
 
 /** A point as written to the store. */

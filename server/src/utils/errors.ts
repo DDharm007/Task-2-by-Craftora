@@ -4,7 +4,7 @@
  * Every error crossing the HTTP boundary becomes an `AppError` so responses
  * carry a stable machine-readable `code` alongside a human message.
  */
-import type { ApiErrorBody, ErrorCode } from '@voxrag/shared';
+import type { ApiErrorBody, ErrorCode } from '@goarag/shared';
 
 export class AppError extends Error {
   readonly code: ErrorCode;

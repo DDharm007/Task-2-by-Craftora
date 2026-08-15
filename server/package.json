@@ -1,5 +1,5 @@
 {
-  "name": "@voxrag/server",
+  "name": "@goarag/server",
   "version": "1.0.0",
   "private": true,
   "type": "module",
@@ -19,7 +19,7 @@
     "@huggingface/hub": "^2.15.0",
     "@huggingface/transformers": "^3.3.3",
     "@qdrant/js-client-rest": "^1.13.0",
-    "@voxrag/shared": "*",
+    "@goarag/shared": "*",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",

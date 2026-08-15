@@ -15,7 +15,7 @@ import type {
   RetrievedChunk,
   StreamEvent,
   TranscriptionResult,
-} from '@voxrag/shared';
+} from '@goarag/shared';
 
 export type StageState = 'idle' | 'running' | 'done';
 

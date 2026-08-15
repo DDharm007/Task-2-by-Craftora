@@ -7,7 +7,7 @@
  * retrieval, when the retrieval row reads 40ms.
  */
 import { Check, Loader2, Minus } from 'lucide-react';
-import { STAGE_LABELS } from '@voxrag/shared';
+import { STAGE_LABELS } from '@goarag/shared';
 import { cn, formatMs } from '@/lib/utils';
 import { STAGES, useSession } from '@/store/session';
 

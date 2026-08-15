@@ -7,8 +7,8 @@
  * real work.
  */
 import { ArrowDown, ArrowUp, FileText, Minus, Search } from 'lucide-react';
-import type { RetrievedChunk } from '@voxrag/shared';
-import { languageName } from '@voxrag/shared';
+import type { RetrievedChunk } from '@goarag/shared';
+import { languageName } from '@goarag/shared';
 import { cn, formatPercent, scoreTone, truncateWords } from '@/lib/utils';
 import { Card, CardHeader, CardContent } from '@/components/ui/card';
 import { Badge, EmptyState, Meter, Tooltip } from '@/components/ui/primitives';
@@ -120,7 +120,9 @@ function ChunkRow({ chunk, index }: { chunk: RetrievedChunk; index: number }) {
               {isOpen ? chunk.text : truncateWords(chunk.text, 34)}
             </p>
 
-            <Meter value={chunk.score} tone={tone} className="mt-2" />
+            {/* The score text above is already tinted by verdict, so the bar
+                carries magnitude — letting two chunks be ranked by eye. */}
+            <Meter value={chunk.score} className="mt-2" />
           </div>
         </div>
       </button>

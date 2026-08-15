@@ -22,7 +22,7 @@
  * parent. Longer passages fan out into all of the above.
  */
 import { createHash } from 'node:crypto';
-import type { Chunk, ChunkMetadata, ChunkStrategy, SourceDocument } from '@voxrag/shared';
+import type { Chunk, ChunkMetadata, ChunkStrategy, SourceDocument } from '@goarag/shared';
 import { estimateTokens, normalizeWhitespace, splitSentences, truncate } from '../../utils/text.js';
 import {
   applyOverlap,

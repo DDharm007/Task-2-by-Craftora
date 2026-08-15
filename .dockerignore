@@ -8,7 +8,9 @@ node_modules
 .env.*
 !.env.example
 models/
-storage/
+# Keep storage/vectors: the runtime image serves queries from the prebuilt index.
+storage/*
+!storage/vectors
 dataset/raw/
 dataset/processed/
 uploads/*

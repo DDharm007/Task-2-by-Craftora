@@ -1,8 +1,8 @@
 {
-  "name": "voxrag",
+  "name": "goarag",
   "version": "1.0.0",
   "private": true,
-  "description": "VoxRAG — production-grade Voice → RAG → LLM pipeline (HackerHouse Goa 2026, Task 2)",
+  "description": "GoaRAG — production-grade Voice → RAG → LLM pipeline (HackerHouse Goa 2026, Task 2)",
   "license": "MIT",
   "type": "module",
   "engines": {

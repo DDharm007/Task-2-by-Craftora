@@ -7,8 +7,8 @@
  * the answer. Retrieved text is fenced inside clearly delimited blocks so
  * instruction-like content inside a passage reads as data, not as a command.
  */
-import type { Citation, ConversationTurn, RetrievedChunk } from '@voxrag/shared';
-import { INSUFFICIENT_EVIDENCE_MESSAGE, languageName } from '@voxrag/shared';
+import type { Citation, ConversationTurn, RetrievedChunk } from '@goarag/shared';
+import { INSUFFICIENT_EVIDENCE_MESSAGE, languageName } from '@goarag/shared';
 import { truncate } from '../../utils/text.js';
 
 export interface ChatMessage {
@@ -30,7 +30,7 @@ const CONTEXT_CHAR_BUDGET = 12_000;
 /** Maximum characters from any single chunk, so one long parent cannot crowd out the rest. */
 const PER_CHUNK_CHAR_LIMIT = 2_400;
 
-const SYSTEM_PROMPT = `You are VoxRAG, a retrieval-grounded assistant. You answer questions using ONLY the numbered context blocks supplied in the user message.
+const SYSTEM_PROMPT = `You are GoaRAG, a retrieval-grounded assistant. You answer questions using ONLY the numbered context blocks supplied in the user message.
 
 RULES — follow all of them:
 

@@ -11,7 +11,7 @@
  * /v1/user, so the health check probes the STT endpoint itself rather than
  * the account endpoint.
  */
-import type { TranscriptionResult, TranscriptWord } from '@voxrag/shared';
+import type { TranscriptionResult, TranscriptWord } from '@goarag/shared';
 import { config } from '../config/env.js';
 import { logger } from '../utils/logger.js';
 import { retry, withTimeout } from '../utils/async.js';

@@ -26,7 +26,10 @@ uploads/*
 
 # local vector store + model cache
 .cache/
-storage/
+storage/*
+# The prebuilt index ships with the repo — Railway builds from git, so an
+# ignored index means the deployed server starts with an empty vector store.
+!storage/vectors
 models/
 
 # logs

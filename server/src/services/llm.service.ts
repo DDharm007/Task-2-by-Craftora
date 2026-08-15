@@ -2,23 +2,23 @@
  * Chat client for the generation half of the RAG pipeline.
  *
  * Uses the OpenAI SDK against an OpenAI-compatible endpoint — configured via
- * `GROQ_*` (default: Groq, `llama-3.3-70b-versatile`), but any compatible
+ * `GROQ_*` (default: Groq, `openai/gpt-oss-120b`), but any compatible
  * gateway works by repointing GROQ_BASE_URL/GROQ_MODEL.
  *
  * Two behaviours shape the implementation:
  *
- *  • Reasoning models (NVIDIA NIM/Nemotron) emit `reasoning_content` deltas
+ *  • Reasoning models emit `reasoning_content` deltas
  *    before any answer tokens when `LLM_ENABLE_THINKING` is on, and a grounded
  *    RAG answer can take 30-120s. Thinking is off by default and opt-in per
  *    request; the reasoning stream is surfaced separately when enabled. The
- *    fields it adds are NIM-specific — Groq 400s on them, so leave it off
- *    unless pointed at a NIM deployment.
+ *    fields it adds are gateway-specific — Groq 400s on them, so leave it off
+ *    unless pointed at a gateway that supports them.
  *  • Non-streaming requests on very large models routinely exceed a
  *    two-minute gateway timeout. We always stream on the wire, and synthesise
  *    a non-streaming response by accumulating deltas when the caller wants one.
  */
 import OpenAI from 'openai';
-import type { TokenUsage } from '@voxrag/shared';
+import type { TokenUsage } from '@goarag/shared';
 import { config } from '../config/env.js';
 import { logger } from '../utils/logger.js';
 import { retry, withTimeout } from '../utils/async.js';
@@ -70,7 +70,7 @@ function getClient(): OpenAI {
   return client;
 }
 
-/** Body shared by both entry points. NIM-specific fields are not in the SDK's types. */
+/** Body shared by both entry points. Gateway extensions are not in the SDK's types. */
 function buildRequestBody(messages: readonly ChatMessage[], options: GenerationOptions) {
   const enableThinking = options.enableThinking ?? config.llm.enableThinking;
   return {
@@ -81,13 +81,9 @@ function buildRequestBody(messages: readonly ChatMessage[], options: GenerationO
     max_tokens: options.maxTokens ?? config.llm.maxTokens,
     stream: true as const,
     stream_options: { include_usage: true },
-    // NVIDIA extensions — passed through the SDK's escape hatch below.
-    ...(enableThinking
-      ? {
-          reasoning_budget: config.llm.reasoningBudget,
-          ...(config.llm.model.includes('nemotron') ? { chat_template_kwargs: { enable_thinking: true } } : {}),
-        }
-      : (config.llm.model.includes('nemotron') ? { chat_template_kwargs: { enable_thinking: false } } : {})),
+    // Non-standard field, passed through the SDK's escape hatch below. Groq
+    // rejects it with a 400, so it is only sent when explicitly opted in.
+    ...(enableThinking ? { reasoning_budget: config.llm.reasoningBudget } : {}),
   };
 }
 
@@ -144,7 +140,7 @@ export async function* streamCompletion(
       onRetry: (error, attempt, delayMs) =>
         logger.warn(
           { attempt, delayMs, error: (error as Error).message },
-          'Retrying Nemotron stream connection',
+          'Retrying LLM stream connection',
         ),
     });
   } catch (error) {
@@ -169,7 +165,7 @@ export async function* streamCompletion(
         yield { content: contentDelta };
       }
 
-      // NIM reports usage on the final chunk when include_usage is set.
+      // Usage arrives on the final chunk when include_usage is set.
       if (event.usage) {
         usage = {
           promptTokens: event.usage.prompt_tokens ?? 0,
@@ -221,7 +217,7 @@ export async function generateCompletion(
   };
 
   try {
-    return await withTimeout(run(), config.llm.timeoutMs, `Nemotron did not respond within ${config.llm.timeoutMs}ms`);
+    return await withTimeout(run(), config.llm.timeoutMs, `The LLM did not respond within ${config.llm.timeoutMs}ms`);
   } catch (error) {
     throw toLlmError(error);
   }
@@ -257,11 +253,11 @@ function toLlmError(error: unknown): Error {
   }
   if (status === 400 && /reasoning_budget|enable_thinking|chat_template_kwargs/i.test(err.message ?? '')) {
     // Highly specific because it is the exact misconfiguration that made every
-    // query 502 until it was tracked down: NIM-only thinking fields sent to a
+    // query 502 until it was tracked down: gateway-only thinking fields sent to a
     // provider that does not accept them.
     return errors.llm(
       `${config.llm.baseUrl} rejected the reasoning parameters. Set LLM_ENABLE_THINKING=false — ` +
-        'thinking is NVIDIA NIM/Nemotron-only.',
+        'thinking is not supported by this gateway.',
       error,
     );
   }

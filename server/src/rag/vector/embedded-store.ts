@@ -23,7 +23,7 @@ import { createReadStream } from 'node:fs';
 import { mkdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { createInterface } from 'node:readline';
 import path from 'node:path';
-import type { ChunkMetadata, ChunkStrategy } from '@voxrag/shared';
+import type { ChunkMetadata, ChunkStrategy } from '@goarag/shared';
 import { logger } from '../../utils/logger.js';
 import { errors } from '../../utils/errors.js';
 import type { SparseVector } from './bm25.js';

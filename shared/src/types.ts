@@ -1,5 +1,5 @@
 /**
- * Core domain types shared between the VoxRAG server and client.
+ * Core domain types shared between the GoaRAG server and client.
  *
  * These describe the wire format of the HTTP/SSE API. Keep them free of any
  * runtime dependency so the browser bundle stays small.

@@ -7,7 +7,7 @@ import type { ErrorRequestHandler, NextFunction, Request, RequestHandler, Respon
 import rateLimit, { type RateLimitRequestHandler } from 'express-rate-limit';
 import multer from 'multer';
 import { ZodError, type ZodSchema } from 'zod';
-import { SUPPORTED_AUDIO_MIME_TYPES } from '@voxrag/shared';
+import { SUPPORTED_AUDIO_MIME_TYPES } from '@goarag/shared';
 import { config } from '../config/env.js';
 import { logger } from '../utils/logger.js';
 import { AppError, toAppError } from '../utils/errors.js';

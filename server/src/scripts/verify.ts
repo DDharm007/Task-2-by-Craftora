@@ -2,7 +2,7 @@
  * CLI: end-to-end smoke test of the whole pipeline.
  *
  *   npm run verify              # retrieval, guardrails, cross-lingual
- *   npm run verify -- --llm     # also exercise Nemotron generation
+ *   npm run verify -- --llm     # also exercise LLM generation
  *
  * Exits non-zero if any check fails, so it works as a CI gate.
  */
@@ -35,7 +35,7 @@ async function main(): Promise<void> {
   process.stdout.write(
     [
       '',
-      '  VoxRAG verification',
+      '  GoaRAG verification',
       '  ───────────────────',
       `  embeddings   ${config.embedding.provider} · ${config.embedding.model}`,
       `  reranker     ${config.reranker.provider}`,

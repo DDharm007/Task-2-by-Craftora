@@ -20,7 +20,7 @@ import type {
   RetrievalQualityMetrics,
   StageLatencyStats,
   TokenUsage,
-} from '@voxrag/shared';
+} from '@goarag/shared';
 import { config } from '../config/env.js';
 import { logger } from '../utils/logger.js';
 import { StageTimer, mapWithConcurrency, now } from '../utils/async.js';
@@ -105,6 +105,15 @@ export async function runBenchmark(options: BenchmarkOptions): Promise<Benchmark
     { cases: selected.length, generation: options.generation, concurrency: options.concurrency },
     'Running benchmark',
   );
+
+  // Warm the models before timing anything. The server does this at boot
+  // (see index.ts), so a lazy load inside the measured window is an artefact of
+  // the harness, not latency a user would ever see: it put a ~2.2s model load
+  // on whichever queries happened to run first and dragged every percentile
+  // above p50 up with it.
+  const warmStarted = now();
+  await Promise.all([getEmbeddingProvider().warmup(), getReranker().warmup()]);
+  logger.info({ ms: Math.round(now() - warmStarted) }, 'Models warm — starting timed run');
 
   const outcomes = await mapWithConcurrency(selected, options.concurrency, async (item) =>
     runCase(item, options.generation),

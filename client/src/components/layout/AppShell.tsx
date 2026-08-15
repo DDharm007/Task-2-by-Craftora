@@ -8,7 +8,7 @@ import { useEffect, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { AudioLines, BarChart3, LayoutDashboard, Menu, X, Circle } from 'lucide-react';
-import type { HealthResponse } from '@voxrag/shared';
+import type { HealthResponse } from '@goarag/shared';
 import { fetchHealth } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -80,9 +80,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       >
         <div className="flex h-16 items-center justify-between border-b border-border px-4">
           <div className="flex items-center gap-2.5">
-            {/* The mark is white artwork, so it needs the dark accent tile
-                behind it — on the light sidebar it would be invisible. */}
-            <div className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-accent">
+            {/* The mark is white artwork, so it needs the saturated tile behind
+                it — on the light sidebar it would be invisible. This is the one
+                place the evidence ramp is decorative rather than a readout. */}
+            <div className="spectrum-tile flex size-11 shrink-0 items-center justify-center rounded-lg">
               <img
                 src="/goarag-logo.png"
                 alt=""

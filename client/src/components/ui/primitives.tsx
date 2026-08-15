@@ -102,27 +102,48 @@ export function Switch({
 
 // ─── Meter ───────────────────────────────────────────────────────────────────
 
-/** Horizontal bar for a 0-1 value. Colour encodes the tone, never decoration. */
+/**
+ * Horizontal bar for a 0-1 value. Colour encodes the value, never decoration.
+ *
+ * `spectrum` is the default for anything that is genuinely a confidence: the
+ * fill is the shared evidence ramp, positioned so a given score always lands
+ * on the same colour regardless of how wide the bar is (see `.spectrum-fill`).
+ * The explicit tones stay for bars that report a *verdict* rather than a
+ * magnitude, where a single flat state colour is the honest reading.
+ */
 export function Meter({
   value,
-  tone = 'neutral',
+  tone = 'spectrum',
   className,
 }: {
   value: number;
-  tone?: 'neutral' | 'success' | 'warning' | 'danger';
+  tone?: 'spectrum' | 'neutral' | 'success' | 'warning' | 'danger';
   className?: string;
 }) {
-  const width = `${Math.max(0, Math.min(1, value)) * 100}%`;
+  const ratio = Math.max(0, Math.min(1, value));
+  const width = `${ratio * 100}%`;
   const fill = {
+    spectrum: 'spectrum-fill',
     neutral: 'bg-ink',
     success: 'bg-success',
     warning: 'bg-warning',
     danger: 'bg-danger',
   }[tone];
 
+  // Stretch the ramp back out to the full track. Guard the divide: at 0 the
+  // fill has no width to paint anyway, so the scale value is irrelevant.
+  const spectrumScale = ratio > 0 ? `${(100 / ratio).toFixed(2)}%` : '100%';
+
   return (
     <div className={cn('h-1.5 w-full overflow-hidden rounded-full bg-border/60', className)}>
-      <div className={cn('h-full rounded-full transition-[width] duration-300', fill)} style={{ width }} />
+      <div
+        className={cn('h-full rounded-full transition-[width] duration-300', fill)}
+        style={
+          tone === 'spectrum'
+            ? ({ width, '--spectrum-scale': spectrumScale } as React.CSSProperties)
+            : { width }
+        }
+      />
     </div>
   );
 }

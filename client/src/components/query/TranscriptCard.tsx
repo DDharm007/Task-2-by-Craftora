@@ -6,8 +6,8 @@
  * so it is shown explicitly rather than buried.
  */
 import { Languages, Mic } from 'lucide-react';
-import type { TranscriptionResult } from '@voxrag/shared';
-import { languageName } from '@voxrag/shared';
+import type { TranscriptionResult } from '@goarag/shared';
+import { languageName } from '@goarag/shared';
 import { formatMs, formatPercent, scoreTone } from '@/lib/utils';
 import { Card, CardHeader, CardContent } from '@/components/ui/card';
 import { Badge, Meter } from '@/components/ui/primitives';
@@ -38,7 +38,7 @@ export function TranscriptCard({ transcription }: { transcription: Transcription
           {transcription.text || <span className="text-ink-tertiary">No speech detected</span>}
         </p>
 
-        <Meter value={transcription.confidence} tone={tone} />
+        <Meter value={transcription.confidence} />
 
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-2xs text-ink-secondary">
           <span className="flex items-center gap-1">

@@ -8,7 +8,7 @@
  */
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import type { LatencyPercentiles } from '@voxrag/shared';
+import type { LatencyPercentiles } from '@goarag/shared';
 import { config, REPO_ROOT } from '../config/env.js';
 import { logger } from '../utils/logger.js';
 import { runBenchmark } from '../services/benchmark.service.js';
@@ -51,10 +51,10 @@ async function main(): Promise<void> {
   process.stdout.write(
     [
       '',
-      '  VoxRAG benchmark',
+      '  GoaRAG benchmark',
       '  ────────────────',
       `  sample size   ${sampleSize} queries`,
-      `  generation    ${generation ? 'enabled (slow — invokes Nemotron per query)' : 'disabled (retrieval only)'}`,
+      `  generation    ${generation ? 'enabled (slow — invokes the LLM per query)' : 'disabled (retrieval only)'}`,
       `  language      ${language ?? 'all'}`,
       `  embeddings    ${config.embedding.provider} · ${config.embedding.model}`,
       `  reranker      ${config.reranker.provider}`,

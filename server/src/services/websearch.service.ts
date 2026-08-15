@@ -3,7 +3,7 @@
  *
  * Used as a fallback when the RAG index has insufficient evidence for a query.
  * No API key required. Returns structured snippets that are injected into the
- * LLM prompt as "web context" so Nemotron can answer general questions.
+ * LLM prompt as "web context" so the model can answer general questions.
  *
  * Two tiers:
  *   1. DuckDuckGo Instant Answer API (fast, structured, covers facts)
@@ -65,7 +65,7 @@ async function ddgInstant(query: string): Promise<WebSnippet[]> {
   url.searchParams.set('skip_disambig', '1');
 
   const response = await fetch(url.toString(), {
-    headers: { 'User-Agent': 'VoxRAG/1.0 (+https://github.com/voxrag)' },
+    headers: { 'User-Agent': 'GoaRAG/1.0 (+https://github.com/goarag)' },
     signal: AbortSignal.timeout(TIMEOUT_MS),
   });
 
@@ -147,7 +147,7 @@ async function ddgHtml(query: string): Promise<WebSnippet[]> {
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
       'User-Agent':
-        'Mozilla/5.0 (compatible; VoxRAG/1.0; +https://github.com/voxrag)',
+        'Mozilla/5.0 (compatible; GoaRAG/1.0; +https://github.com/goarag)',
       Accept: 'text/html',
     },
     body: form.toString(),

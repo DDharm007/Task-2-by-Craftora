@@ -20,7 +20,7 @@ import type {
   GuardrailReport,
   GuardrailResult,
   RetrievedChunk,
-} from '@voxrag/shared';
+} from '@goarag/shared';
 import { config } from '../../config/env.js';
 import { now } from '../../utils/async.js';
 import { contentTokens, coverage, splitSentences, tokenize } from '../../utils/text.js';

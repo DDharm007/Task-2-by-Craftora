@@ -15,7 +15,7 @@ import type {
   StreamEvent,
   TranscriptionResult,
   ApiErrorBody,
-} from '@voxrag/shared';
+} from '@goarag/shared';
 
 /**
  * API origin.

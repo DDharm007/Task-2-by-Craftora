@@ -13,11 +13,11 @@ import type {
   StatsQuery,
   StreamEvent,
   ComponentHealth,
-} from '@voxrag/shared';
+} from '@goarag/shared';
 import {
   transcribeOptionsSchema,
   voiceQueryOptionsSchema,
-} from '@voxrag/shared';
+} from '@goarag/shared';
 import { config } from '../config/env.js';
 import { AppError, toAppError } from '../utils/errors.js';
 import { logger } from '../utils/logger.js';

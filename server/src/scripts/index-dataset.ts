@@ -24,7 +24,7 @@ async function main(): Promise<void> {
   process.stdout.write(
     [
       '',
-      '  VoxRAG indexer',
+      '  GoaRAG indexer',
       '  ──────────────',
       `  embeddings   ${config.embedding.provider} · ${config.embedding.model} (${config.embedding.dimensions}d)`,
       `  vector store ${config.vectorStore.driver}`,

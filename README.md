@@ -1,11 +1,11 @@
 <div align="center">
 
-# VoxRAG
+# GoaRAG
 
 **A voice-driven, retrieval-grounded question answering system over multilingual MS MARCO.**
 
 Speak a question in Hindi or English → ElevenLabs Scribe transcribes it → hybrid dense + BM25
-retrieval over Qdrant → cross-encoder reranking → Nemotron Ultra answers **only** from the
+retrieval over Qdrant → cross-encoder reranking → GPT-OSS 120B answers **only** from the
 retrieved passages → eight guardrails verify the answer before you see it.
 
 Built for HackerHouse Goa 2026 · Task 2.
@@ -92,7 +92,7 @@ Three properties drive every design decision here:
                                            ▼
                         ┌──────────────────────────────────────┐
                         │  Prompt builder → numbered blocks    │
-                        │  Nemotron-3 Ultra 550B (streaming)   │
+                        │  GPT-OSS 120B on Groq (streaming)    │
                         └──────────────────┬───────────────────┘
                                            ▼
                         ┌──────────────────────────────────────┐
@@ -114,10 +114,10 @@ Full rationale for each stage: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 | Frontend | React 18, Vite 6, TypeScript, TailwindCSS, Radix primitives, Framer Motion, TanStack Query, Zustand, Recharts |
 | Backend | Node 22, Express, TypeScript (strict), Zod, Pino |
 | Vector DB | Qdrant (named dense + sparse vectors) — with a disk-persisted embedded driver for local dev |
-| Embeddings | `BAAI/bge-m3` (1024-dim, multilingual) via ONNX Runtime, or NVIDIA NIM hosted embeddings |
+| Embeddings | `BAAI/bge-m3` (1024-dim, multilingual) via ONNX Runtime, in-process |
 | Reranker | `bge-reranker-base` cross-encoder (ONNX), with a lexical fallback |
 | Speech-to-text | ElevenLabs Scribe v1 |
-| LLM | `nvidia/nemotron-3-ultra-550b-a55b` via the OpenAI SDK against NVIDIA NIM |
+| LLM | `openai/gpt-oss-120b` via the OpenAI SDK against GroqCloud |
 | Dataset | [`ai4bharat/MSMARCO-XI`](https://huggingface.co/datasets/ai4bharat/MSMARCO-XI) |
 
 ---
@@ -125,14 +125,14 @@ Full rationale for each stage: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 ## Quick start
 
 ```bash
-git clone <your-repo-url> && cd voxrag
+git clone <your-repo-url> && cd goarag
 ```
 
 ```bash
 cp .env.example .env
 ```
 
-Add your `NVIDIA_API_KEY` and `ELEVENLABS_API_KEY` to `.env`, then:
+Add your `GROQ_API_KEY` and `ELEVENLABS_API_KEY` (or `SARVAM_API_KEY`) to `.env`, then:
 
 ```bash
 npm install && npm run build:shared
@@ -148,10 +148,10 @@ npm run dev
 
 The API comes up on `http://localhost:8787` and the UI on `http://localhost:5173`.
 
-> **First run takes a while.** With the default `EMBEDDING_PROVIDER=local`, BGE-M3 downloads
-> ~550MB of ONNX weights and indexing is CPU-bound (~45 min for the default 300-row corpus).
-> For a fast path, set `EMBEDDING_PROVIDER=nvidia` — no download, and indexing drops to a few
-> minutes. See [Dataset](#dataset) for how to shrink the corpus instead.
+> **First run takes a while.** BGE-M3 downloads ~550MB of ONNX weights and indexing is
+> CPU-bound (~45 min for the default 300-row corpus). The prebuilt index is committed under
+> `storage/vectors`, so you only need to re-index if you change the corpus or the embedding
+> model. See [Dataset](#dataset) for how to shrink the corpus.
 
 ---
 
@@ -165,11 +165,13 @@ The table lists what you are most likely to change; `.env.example` documents all
 
 | Variable | Default | Notes |
 | --- | --- | --- |
-| `NVIDIA_API_KEY` | — | **Required.** From [build.nvidia.com](https://build.nvidia.com). |
+| `GROQ_API_KEY` | — | **Required.** From [console.groq.com](https://console.groq.com). |
 | `ELEVENLABS_API_KEY` | — | Needed for voice. The key only needs the `speech_to_text` scope. |
-| `NVIDIA_MODEL` | `nvidia/nemotron-3-ultra-550b-a55b` | Any NIM chat model. |
-| `LLM_ENABLE_THINKING` | `false` | Nemotron's reasoning mode. Adds 30–120s per query. |
-| `EMBEDDING_PROVIDER` | `local` | `local` = BGE-M3 in-process; `nvidia` = hosted, much faster. |
+| `SARVAM_API_KEY` | — | Alternative voice provider; TTS tries Sarvam first. |
+| `GROQ_MODEL` | `openai/gpt-oss-120b` | Any Groq chat model. |
+| `LLM_ENABLE_THINKING` | `false` | Reasoning mode. Unsupported on Groq (400s). |
+| `EMBEDDING_PROVIDER` | `local` | BGE-M3 in-process via ONNX. |
+| `RERANKER_PROVIDER` | `heuristic` | `heuristic` is ~1.5s faster; `local` is more accurate. |
 | `VECTOR_STORE` | `auto` | `auto` uses Qdrant if reachable, else the embedded store. |
 | `QDRANT_URL` | `http://localhost:6333` | Set to your Qdrant Cloud URL in production. |
 | `RETRIEVAL_TOP_K` | `10` | Candidates fused before reranking. |
@@ -295,7 +297,7 @@ curl 'http://localhost:8787/api/benchmark?sampleSize=20&generation=false'
 
 ### `GET /api/health`
 
-Cheap by default; `?deep=true` additionally probes NVIDIA and ElevenLabs. Returns 503 when a
+Cheap by default; `?deep=true` additionally probes Groq and the voice providers. Returns 503 when a
 component is down so an orchestrator can act on it.
 
 ### `GET /api/stats`
@@ -417,7 +419,7 @@ whether retrieval works. The sample is a deterministic stride, so runs are compa
 | Reranking | 1.70s | 2.84s | 2.94s |
 | **Total** | **2.28s** | **5.31s** | **5.37s** |
 
-End-to-end with generation, a typical query answers in ~5s (retrieval ~0.4s, Nemotron ~4.7s) at
+End-to-end with generation, a typical query answers in ~2s (retrieval ~0.35s, generation ~1.6s) at
 91% confidence with 100% groundedness.
 
 Two things worth reading off these numbers. Precision@5 looks low because each query has ~2
@@ -448,7 +450,7 @@ instead of quietly writing to a container-local file that vanishes on redeploy.
 Recommended production settings:
 
 ```bash
-EMBEDDING_PROVIDER=nvidia   # no 550MB cold-start download
+RERANKER_PROVIDER=heuristic # ~1.5s faster per query than the cross-encoder
 VECTOR_STORE=qdrant         # never silently fall back
 NODE_ENV=production         # withholds error internals from responses
 CORS_ORIGIN=https://your-frontend.vercel.app
@@ -464,7 +466,7 @@ the cloud URL to populate it.
 ## Project layout
 
 ```
-voxrag/
+goarag/
 ├── client/                  React frontend
 │   └── src/
 │       ├── components/      ui/ · layout/ · voice/ · query/
@@ -479,7 +481,7 @@ voxrag/
 │       ├── middleware/      validation · rate limits · uploads · errors
 │       ├── rag/
 │       │   ├── chunking/    six strategies + the pipeline that composes them
-│       │   ├── embeddings/  local ONNX + NVIDIA providers behind one interface
+│       │   ├── embeddings/  local ONNX provider behind a swappable interface
 │       │   ├── vector/      Qdrant driver · embedded driver · BM25
 │       │   ├── retriever/   hybrid search · RRF · MMR
 │       │   ├── reranker/    cross-encoder + lexical fallback
@@ -501,12 +503,16 @@ voxrag/
 
 Things discovered while building this that shaped the result:
 
-**NVIDIA's `baai/bge-m3` NIM returns HTTP 500.** It is listed in `/v1/models`, but every request
-shape fails. BGE-M3 therefore runs locally via ONNX (which is spec-faithful and removes a network
-hop), with `nvidia/nv-embedqa-e5-v5` — also 1024-dim, so a drop-in swap — as the hosted
-alternative.
+**Model load inside the measured window wrecked the latency percentiles.** The benchmark did not
+warm the models before timing, so a ~2.2s lazy load landed on whichever queries ran first and
+dragged every percentile above p50 with it — p100 read 5.4s against a true 0.48s. The server
+already warmed at boot; the harness now does the same before its timed run.
 
-**Nemotron Ultra must be streamed.** Non-streaming requests on a 550B model routinely exceed a
+**Cross-encoder reranking dominates the latency budget.** Ten forward passes on CPU cost ~1.55s at
+p50 — roughly 4× the rest of the pipeline combined. The heuristic reranker is the default for that
+reason; it trades ~7pp of recall@5 for a 3.5× faster query.
+
+**Large responses must be streamed.** Non-streaming requests on big models routinely exceed a
 two-minute gateway timeout. The client always streams on the wire and synthesises a non-streaming
 response by accumulating deltas.
 

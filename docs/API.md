@@ -29,7 +29,7 @@ internal state.
 | `VECTOR_STORE_UNAVAILABLE` | 503 | Qdrant unreachable. |
 | `STT_FAILED` | 502 | ElevenLabs rejected or failed the request. |
 | `EMBEDDING_FAILED` | 502 | Embedding provider failed. |
-| `LLM_FAILED` | 502 | NVIDIA NIM failed. |
+| `LLM_FAILED` | 502 | The LLM gateway failed. |
 | `LLM_TIMEOUT` | 504 | Generation exceeded `LLM_TIMEOUT_MS`. |
 | `INTERNAL_ERROR` | 500 | Unhandled. |
 
@@ -65,7 +65,7 @@ Ask a question as text.
     "enableRerank": true,
     "enableMmr": true,
     "enableParentExpansion": true,
-    "enableThinking": false,            // Nemotron reasoning mode — much slower
+    "enableThinking": false,            // reasoning mode — much slower
     "retrievalOnly": false              // skip generation, return chunks only
   },
   "stream": false
@@ -112,7 +112,7 @@ Ask a question as text.
     "guardrailsPost": 1.1, "total": 4210, "timeToFirstToken": null
   },
   "usage": { "promptTokens": 900, "completionTokens": 64, "reasoningTokens": 0, "totalTokens": 964 },
-  "model": "nvidia/nemotron-3-ultra-550b-a55b",
+  "model": "openai/gpt-oss-120b",
   "providers": { "embedding": "local:onnx:BAAI/bge-m3", "vectorStore": "qdrant", "reranker": "local:cross-encoder", "llm": "…", "stt": null },
   "createdAt": "2026-08-13T…"
 }
@@ -307,7 +307,7 @@ Scored against the dataset's `is_selected` labels. See
 
 ## `GET /api/health`
 
-`?deep=true` additionally probes NVIDIA and ElevenLabs, which costs real API calls. The default is
+`?deep=true` additionally probes Groq and the voice providers, which costs real API calls. The default is
 cheap and suitable for a load-balancer probe.
 
 Returns **503** when any component is `down`; `degraded` still returns 200 because the service can
@@ -343,7 +343,7 @@ serve traffic.
     "averageChunkSizeChars": 380, "averageChunkTokens": 96,
     "languages": [ { "language": "eng_Latn", "count": 3544 } ],
     "strategies": [ { "strategy": "semantic", "count": 4100 } ],
-    "collection": "voxrag_msmarco_xi", "vectorStore": "qdrant",
+    "collection": "goarag_msmarco_xi", "vectorStore": "qdrant",
     "embeddingModel": "BAAI/bge-m3", "embeddingDimensions": 1024,
     "lastIndexedAt": "…", "indexed": true
   },

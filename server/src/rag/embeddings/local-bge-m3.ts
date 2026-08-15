@@ -2,7 +2,7 @@
  * BAAI/bge-m3 running in-process via ONNX Runtime (Transformers.js).
  *
  * This is the spec's embedding model. It runs locally rather than through an
- * API because NVIDIA's hosted `baai/bge-m3` NIM currently returns HTTP 500 —
+ * API, which runs the model in-process with no external dependency —
  * see docs/ARCHITECTURE.md. Running locally also removes a network hop from
  * the hot path and makes indexing cost-free.
  *

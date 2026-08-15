@@ -25,54 +25,81 @@
  * never flashes light first).
  */
 :root {
-  --canvas: 255 255 255;
-  --subtle: 250 250 250;
+  /* Neutrals are blue-shifted rather than true grey. On an instrument panel
+     every neutral sits next to a saturated readout, and a pure-grey surface
+     reads slightly yellow by contrast next to indigo. */
+  --canvas: 251 252 253;
+  --subtle: 244 246 250;
   --card: 255 255 255;
-  --border: 229 231 235;
-  --border-strong: 209 213 219;
-  --ink: 17 24 39;
-  --ink-secondary: 107 114 128;
-  --ink-tertiary: 156 163 175;
-  --accent: 17 24 39;
-  --accent-hover: 31 41 55;
-  --success: 22 163 74;
-  --success-subtle: 240 253 244;
-  --success-border: 187 247 208;
-  --warning: 217 119 6;
+  --border: 226 231 240;
+  --border-strong: 200 208 222;
+  --ink: 16 19 28;
+  --ink-secondary: 90 100 120;
+  --ink-tertiary: 142 151 168;
+  /* Deep ultramarine. Dark enough to carry white text at AA on a 9px label,
+     saturated enough to read as a deliberate hue rather than "link blue". */
+  --accent: 53 56 205;
+  --accent-hover: 42 44 171;
+  --success: 14 159 110;
+  --success-subtle: 236 253 245;
+  --success-border: 167 243 208;
+  --warning: 180 83 9;
   --warning-subtle: 255 251 235;
   --warning-border: 253 230 138;
   --danger: 220 38 38;
   --danger-subtle: 254 242 242;
   --danger-border: 254 202 202;
-  /** Recording waveform fill. Same as ink by default — a distinct token only
-      so Exclusive can hand it the brand yellow without waveform code needing
-      to know which theme is active. */
-  --waveform: 17 24 39;
+  /** Recording waveform fill. A distinct token so each theme can point it
+      somewhere different without waveform code knowing which theme is active. */
+  --waveform: 53 56 205;
+
+  /**
+   * The evidence spectrum — the one gradient in the system.
+   *
+   * Every number this app shows is a 0-1 confidence: similarity, context
+   * verification, reranker score, the blended confidence. They all share one
+   * perceptually-ordered ramp so a colour means the same thing in every panel
+   * — weak evidence sits at indigo, strong evidence at mint, and the eye can
+   * compare two bars across two cards without reading either label.
+   *
+   * Ordered like a scientific colormap (monotonic in lightness) rather than
+   * picked for looks, which is also why it survives being read at 6px tall.
+   */
+  --spectrum-0: 53 56 205;
+  --spectrum-1: 6 169 201;
+  --spectrum-2: 18 185 129;
 }
 
 /* Dark — a conventional low-glare dark surface, accent picked up in blue since
    an ink-black accent tile would disappear against an already-dark canvas. */
 [data-theme='dark'] {
-  --canvas: 11 13 16;
-  --subtle: 19 22 25;
-  --card: 21 24 28;
-  --border: 38 43 49;
-  --border-strong: 54 60 68;
-  --ink: 243 244 246;
-  --ink-secondary: 156 163 175;
-  --ink-tertiary: 107 114 128;
-  --accent: 47 111 237;
-  --accent-hover: 76 134 245;
-  --success: 34 197 94;
-  --success-subtle: 11 46 27;
-  --success-border: 28 82 51;
+  --canvas: 10 12 18;
+  --subtle: 17 20 28;
+  --card: 20 24 34;
+  --border: 35 41 55;
+  --border-strong: 51 59 77;
+  --ink: 237 240 245;
+  --ink-secondary: 154 164 184;
+  --ink-tertiary: 107 118 137;
+  /* The light theme's ultramarine is near-invisible on a dark canvas, so the
+     accent lifts to the same hue two steps brighter. */
+  --accent: 99 102 241;
+  --accent-hover: 129 140 248;
+  --success: 52 211 153;
+  --success-subtle: 6 46 33;
+  --success-border: 16 84 62;
   --warning: 245 158 11;
   --warning-subtle: 58 42 5;
   --warning-border: 92 67 16;
   --danger: 248 113 113;
   --danger-subtle: 58 20 20;
   --danger-border: 92 34 34;
-  --waveform: 243 244 246;
+  --waveform: 129 140 248;
+  /* Same ramp, lifted for a dark surface — the ordering (and therefore the
+     meaning) is identical, only the luminance floor moves. */
+  --spectrum-0: 129 140 248;
+  --spectrum-1: 34 211 238;
+  --spectrum-2: 52 211 153;
 }
 
 /* HHGoa'26 Exclusive — built directly from the three brand colours: deep
@@ -101,6 +128,11 @@
   --danger-subtle: 61 14 20;
   --danger-border: 107 27 38;
   --waveform: 254 225 1; /* #FEE101 — the recording bars read as yellow */
+  /* Built from the two brand colours that read on green, so the spectrum
+     stays on-brand here instead of importing the indigo ramp. */
+  --spectrum-0: 255 0 128; /* #FF0080 */
+  --spectrum-1: 254 225 1; /* #FEE101 */
+  --spectrum-2: 134 239 172;
 }
 
 /**
@@ -157,13 +189,14 @@
   }
 
   /* A visible, consistent focus ring — keyboard navigation is a first-class
-     path in a developer tool, not an afterthought. */
+     path in a developer tool, not an afterthought. Drawn in the accent so it
+     reads as the same system as the primary action it usually lands on. */
   :focus-visible {
-    @apply outline-none ring-2 ring-ink/80 ring-offset-2 ring-offset-canvas;
+    @apply outline-none ring-2 ring-accent/70 ring-offset-2 ring-offset-canvas;
   }
 
   ::selection {
-    @apply bg-ink/10;
+    @apply bg-accent/15;
   }
 
   /* Slim scrollbars that match the surface rather than the OS default. */
@@ -202,6 +235,33 @@
 
   .mono {
     @apply font-mono text-xs;
+  }
+
+  /**
+   * The evidence spectrum, painted so colour tracks the *absolute* value.
+   *
+   * The naive way to gradient-fill a meter is to put the ramp on the fill
+   * element, but then the ramp is squeezed into whatever width the bar
+   * happens to be: a 0.10 bar and a 0.90 bar would both end at mint, and the
+   * colour would encode nothing. Instead the ramp is sized to the full track
+   * (`--spectrum-scale`, set inline as 100/percent) so a score always lands
+   * on the same colour, and the fill just reveals more of a fixed ramp.
+   */
+  .spectrum-fill {
+    background-image: linear-gradient(
+      90deg,
+      rgb(var(--spectrum-0)),
+      rgb(var(--spectrum-1)) 55%,
+      rgb(var(--spectrum-2))
+    );
+    background-size: var(--spectrum-scale, 100%) 100%;
+    background-repeat: no-repeat;
+  }
+
+  /* The identity mark's tile — the one place the ramp is allowed to be
+     decorative rather than a readout. */
+  .spectrum-tile {
+    background-image: linear-gradient(135deg, rgb(var(--spectrum-0)), rgb(var(--spectrum-1)));
   }
 }
 

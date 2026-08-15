@@ -14,7 +14,6 @@ const redactPaths = [
   'apiKey',
   '*.apiKey',
   'GROQ_API_KEY',
-  'NVIDIA_EMBEDDING_API_KEY',
   'ELEVENLABS_API_KEY',
   'SARVAM_API_KEY',
   'QDRANT_API_KEY',
@@ -23,7 +22,7 @@ const redactPaths = [
 export const logger: Logger = pino({
   level: config.logLevel,
   redact: { paths: redactPaths, censor: '[redacted]' },
-  base: { service: 'voxrag-server' },
+  base: { service: 'goarag-server' },
   timestamp: pino.stdTimeFunctions.isoTime,
   ...(config.isProduction
     ? {}

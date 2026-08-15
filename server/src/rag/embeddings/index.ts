@@ -9,7 +9,6 @@ import { createHash } from 'node:crypto';
 import { config } from '../../config/env.js';
 import { logger } from '../../utils/logger.js';
 import { LocalBgeM3Provider } from './local-bge-m3.js';
-import { NvidiaEmbeddingProvider } from './nvidia.js';
 import type { EmbeddingInputType, EmbeddingProvider } from './types.js';
 
 /** Bounded LRU over embedded texts. */
@@ -112,8 +111,7 @@ let provider: EmbeddingProvider | null = null;
 /** The process-wide embedding provider. */
 export function getEmbeddingProvider(): EmbeddingProvider {
   if (!provider) {
-    const inner =
-      config.embedding.provider === 'nvidia' ? new NvidiaEmbeddingProvider() : new LocalBgeM3Provider();
+    const inner = new LocalBgeM3Provider();
     logger.info(
       { provider: inner.name, model: inner.model, dimensions: inner.dimensions },
       'Embedding provider selected',
