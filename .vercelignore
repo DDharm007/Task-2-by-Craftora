@@ -1,0 +1,3 @@
+# The prebuilt vector index (~67MB) — needed by the Railway-hosted backend,
+# irrelevant to the Vercel-hosted frontend build.
+storage/vectors

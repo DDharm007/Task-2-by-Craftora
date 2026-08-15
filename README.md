@@ -438,8 +438,22 @@ or a hosted reranker.
 vercel --prod
 ```
 
-Root directory `client`, build `npm run build`, output `dist`. Set `VITE_API_BASE_URL` to your
-API's public URL. `vercel.json` handles the SPA rewrite and asset caching.
+Import the repo as-is — leave **Root Directory** at its default (the repo root). The top-level
+`vercel.json` handles everything: it installs the full npm workspace, builds `shared` then
+`client`, and points `outputDirectory` at `client/dist`. This only works from the repo root
+because `client` depends on the `shared` workspace package; pointing Root Directory at `client`
+would hide `shared` from the install step and the build would fail to resolve `@goarag/shared`.
+
+Set `VITE_API_BASE_URL` as a Vercel **Environment Variable** (Project → Settings → Environment
+Variables) to your Railway API's public URL, e.g. `https://your-api.up.railway.app`. This is a
+build-time value — Vite bakes it into the bundle, so it must be set before you deploy, and
+changing it later requires a redeploy. Leaving it unset does not fail the build; it silently
+ships a client that calls relative `/api/...` paths on the Vercel domain itself, where no backend
+exists, so every request 404s at runtime.
+
+Only the backend deploy is a serverless-incompatible service (see [Why not host the backend on
+Vercel too?](#why-not-host-the-backend-on-vercel-too) below) — the frontend here is a plain static
+build with zero Vercel functions involved.
 
 ### Backend → Railway
 
@@ -460,6 +474,28 @@ CORS_ORIGIN=https://your-frontend.vercel.app
 
 Create a free cluster, then set `QDRANT_URL` and `QDRANT_API_KEY`. Run the indexer once against
 the cloud URL to populate it.
+
+### Why not host the backend on Vercel too?
+
+The frontend is a plain static build, which is exactly what Vercel is for. The backend is not,
+for reasons specific to how this pipeline works rather than anything a config change fixes:
+
+- **In-process ML models.** BGE-M3 embeddings (~550MB) and the cross-encoder reranker (~266MB)
+  load as ONNX weights directly in the Node process. Vercel serverless functions cap deployment
+  size well below that.
+- **In-memory vector index.** The embedded store loads the full index into a flat `Float32Array`
+  on first use and keeps it resident so scans stay fast. Serverless functions are stateless
+  between invocations — every cold start would mean reloading the index *and* both models from
+  scratch, which is minutes of latency, not milliseconds, repeated on every cold start.
+- **Boot-time warmup.** The server warms both models right after it starts listening so the first
+  real query isn't slow. That assumes a long-lived process; it does nothing useful in a function
+  that exits after the response.
+- **SSE streaming.** The query endpoint streams `text/event-stream` chunks as the pipeline
+  progresses. Vercel Node functions also cap execution time (10s on Hobby) — retrieval plus
+  reranking plus LLM generation can exceed that before streaming semantics even become a concern.
+
+Railway (or any host running a persistent process) is the correct fit for the backend; Vercel is
+the correct fit for the frontend. Keep the split.
 
 ---
 
