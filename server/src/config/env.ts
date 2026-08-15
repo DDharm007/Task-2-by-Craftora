@@ -196,9 +196,13 @@ const parsed = envSchema.safeParse(process.env);
 
 if (!parsed.success) {
   // Fail fast and loudly — a half-configured RAG server is worse than none.
+  const fixHint =
+    process.env.NODE_ENV === 'production'
+      ? 'Set the missing variable(s) above in your host platform\'s dashboard ' +
+        '(e.g. Railway: Service → Variables) and redeploy. There is no .env file in the container.\n\n'
+      : 'Copy .env.example to .env and fill in the required values.\n\n';
   process.stderr.write(
-    `\n✖ Invalid environment configuration:\n${formatIssues(parsed.error)}\n\n` +
-      `Copy .env.example to .env and fill in the required values.\n\n`,
+    `\n✖ Invalid environment configuration:\n${formatIssues(parsed.error)}\n\n${fixHint}`,
   );
   process.exit(1);
 }
