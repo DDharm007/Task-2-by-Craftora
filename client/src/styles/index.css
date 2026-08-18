@@ -1,9 +1,11 @@
-/* Poppins has no variable build upstream, so each weight actually used in the
-   UI is imported individually rather than pulling the whole static family. */
-@import '@fontsource/poppins/400.css';
-@import '@fontsource/poppins/500.css';
-@import '@fontsource/poppins/600.css';
-@import '@fontsource/poppins/700.css';
+/* Two faces carry the product language, the way Indus splits them: a
+   geometric grotesque (Figtree, standing in for Matter) does all the UI and
+   body work, and a sturdy low-contrast serif (Noto Serif) is reserved for
+   headings and display text. Amita stays for Devanagari, and the local mono
+   face loads last. */
+@import url('https://fonts.googleapis.com/css2?family=Figtree:ital,wght@0,300..900;1,300..900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Amita:wght@400;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Noto+Serif:ital,wght@0,100..900;1,100..900&display=swap');
 @import '@fontsource/jetbrains-mono/400.css';
 @import '@fontsource/jetbrains-mono/500.css';
 
@@ -25,33 +27,51 @@
  * never flashes light first).
  */
 :root {
-  /* Neutrals are blue-shifted rather than true grey. On an instrument panel
-     every neutral sits next to a saturated readout, and a pure-grey surface
-     reads slightly yellow by contrast next to indigo. */
-  --canvas: 251 252 253;
-  --subtle: 244 246 250;
+  /* Warm paper surfaces and hairline borders, sampled straight from Indus:
+     one warm off-white canvas, pure white for anything that is a surface,
+     and a single hairline value doing all the separation work. Nothing here
+     casts a shadow — depth comes from the border, not from lift. */
+  --canvas: 247 245 243;
+  --subtle: 240 238 234;
   --card: 255 255 255;
-  --border: 226 231 240;
-  --border-strong: 200 208 222;
-  --ink: 16 19 28;
-  --ink-secondary: 90 100 120;
-  --ink-tertiary: 142 151 168;
-  /* Deep ultramarine. Dark enough to carry white text at AA on a 9px label,
-     saturated enough to read as a deliberate hue rather than "link blue". */
-  --accent: 53 56 205;
-  --accent-hover: 42 44 171;
-  --success: 14 159 110;
-  --success-subtle: 236 253 245;
-  --success-border: 167 243 208;
-  --warning: 180 83 9;
-  --warning-subtle: 255 251 235;
-  --warning-border: 253 230 138;
-  --danger: 220 38 38;
-  --danger-subtle: 254 242 242;
-  --danger-border: 254 202 202;
-  /** Recording waveform fill. A distinct token so each theme can point it
-      somewhere different without waveform code knowing which theme is active. */
-  --waveform: 53 56 205;
+  --border: 232 229 224;
+  --border-strong: 213 209 201;
+  --ink: 20 20 20;
+  --ink-secondary: 92 90 85;
+  --ink-tertiary: 153 150 142;
+  /* The primary action is near-black on light, and white text sits on it —
+     `--on-accent` is that pairing, so a theme can flip the relationship
+     without every button having to know which theme is active. */
+  --accent: 20 20 20;
+  --accent-hover: 58 58 56;
+  --on-accent: 255 255 255;
+  /**
+   * The one warm colour in the system. Indus uses it exactly twice — the
+   * active navigation row and the icon inside it — so it reads as "you are
+   * here" rather than as decoration. It never becomes a button.
+   */
+  --brand: 216 106 32;
+  --brand-subtle: 246 237 228;
+  --success: 18 132 94;
+  --success-subtle: 238 248 242;
+  --success-border: 185 225 207;
+  --warning: 164 103 14;
+  --warning-subtle: 253 248 235;
+  --warning-border: 236 214 164;
+  --danger: 190 58 48;
+  --danger-subtle: 253 242 240;
+  --danger-border: 239 202 197;
+  /** Recording waveform fill — grey, tied to `ink` rather than to any accent
+      colour. Height already reports loudness; a second channel saying the
+      same thing just adds glare, and colour here was tried (violet, then
+      danger red) and read as noise rather than signal — grey keeps the
+      wave inside the same restrained language as the rest of the UI. A
+      distinct token so each theme can point it somewhere different without
+      the waveform code knowing which theme is active. */
+  --waveform: 20 20 20;
+  /** The pipeline tube's liquid. Flat neutral grey — the tube's shape is
+      what says "fluid", not a colour or a shine on top of it. */
+  --flow: 143 139 130;
 
   /**
    * The evidence spectrum — the one gradient in the system.
@@ -65,26 +85,28 @@
    * Ordered like a scientific colormap (monotonic in lightness) rather than
    * picked for looks, which is also why it survives being read at 6px tall.
    */
-  --spectrum-0: 53 56 205;
-  --spectrum-1: 6 169 201;
-  --spectrum-2: 18 185 129;
+  --spectrum-0: 81 79 73;
+  --spectrum-1: 41 134 105;
+  --spectrum-2: 18 132 94;
 }
 
-/* Dark — a conventional low-glare dark surface, accent picked up in blue since
-   an ink-black accent tile would disappear against an already-dark canvas. */
+/* Dark — the same language inverted rather than a different one: warm-neutral
+   dark surfaces (not blue-black), and the primary action becomes a light pill
+   with dark text, mirroring the black-pill-on-paper of Light. */
 [data-theme='dark'] {
-  --canvas: 10 12 18;
-  --subtle: 17 20 28;
-  --card: 20 24 34;
-  --border: 35 41 55;
-  --border-strong: 51 59 77;
-  --ink: 237 240 245;
-  --ink-secondary: 154 164 184;
-  --ink-tertiary: 107 118 137;
-  /* The light theme's ultramarine is near-invisible on a dark canvas, so the
-     accent lifts to the same hue two steps brighter. */
-  --accent: 99 102 241;
-  --accent-hover: 129 140 248;
+  --canvas: 18 17 16;
+  --subtle: 26 25 23;
+  --card: 33 31 29;
+  --border: 51 48 45;
+  --border-strong: 74 70 65;
+  --ink: 244 242 238;
+  --ink-secondary: 168 163 154;
+  --ink-tertiary: 122 117 109;
+  --accent: 244 242 238;
+  --accent-hover: 214 211 204;
+  --on-accent: 20 20 20;
+  --brand: 232 137 63;
+  --brand-subtle: 56 40 26;
   --success: 52 211 153;
   --success-subtle: 6 46 33;
   --success-border: 16 84 62;
@@ -94,7 +116,8 @@
   --danger: 248 113 113;
   --danger-subtle: 58 20 20;
   --danger-border: 92 34 34;
-  --waveform: 129 140 248;
+  --waveform: 244 242 238;
+  --flow: 122 117 109;
   /* Same ramp, lifted for a dark surface — the ordering (and therefore the
      meaning) is identical, only the luminance floor moves. */
   --spectrum-0: 129 140 248;
@@ -102,58 +125,36 @@
   --spectrum-2: 52 211 153;
 }
 
-/* HHGoa'26 Exclusive — built directly from the three brand colours: deep
-   green as the immersive canvas, hot pink carrying every clickable action,
-   and the bright yellow doing double duty as the warning hue so it isn't
-   just decorative. Supporting neutrals are new (the brand only specified
-   three colours) but every one of the three appears exactly as given. */
+/* HHGoa'26 Exclusive — light green background (#A5D6A7) with dark text and solid white cards, no gradients. */
 [data-theme='exclusive'] {
-  --canvas: 3 103 53; /* #036735 */
-  --subtle: 2 79 40;
-  --card: 11 122 64;
-  --border: 46 145 96;
+  --canvas: 3 104 52; /* #036834 - Dark green background */
+  --subtle: 2 79 40; /* Darker for hover states */
+  --card: 11 122 64; /* Solid slightly lighter green for cards */
+  --border: 46 145 96; /* Soft border */
   --border-strong: 70 168 118;
-  --ink: 247 251 244;
+  --ink: 247 251 244; /* Light text */
   --ink-secondary: 185 217 198;
   --ink-tertiary: 127 175 149;
   --accent: 255 0 128; /* #FF0080 */
   --accent-hover: 255 77 166;
-  --success: 74 222 128;
-  --success-subtle: 6 56 30;
-  --success-border: 18 101 58;
-  --warning: 254 225 1; /* #FEE101 */
-  --warning-subtle: 61 51 0;
-  --warning-border: 107 90 0;
-  --danger: 255 71 87;
-  --danger-subtle: 61 14 20;
-  --danger-border: 107 27 38;
-  --waveform: 254 225 1; /* #FEE101 — the recording bars read as yellow */
-  /* Built from the two brand colours that read on green, so the spectrum
-     stays on-brand here instead of importing the indigo ramp. */
-  --spectrum-0: 255 0 128; /* #FF0080 */
-  --spectrum-1: 254 225 1; /* #FEE101 */
-  --spectrum-2: 134 239 172;
-}
-
-/**
- * Exclusive-only glass treatment.
- *
- * `<AmbientGlow>` paints two drifting blue/red lights behind everything;
- * without a translucent, blurred surface for them to show through, they'd
- * just be lights behind opaque cards — invisible. This is the other half of
- * that effect, and why the two only make sense shipped together. Every
- * surface built from the `Card` component picks this up automatically
- * because it targets the `bg-card` utility itself, at higher specificity
- * than Tailwind's own rule for it — no per-component change needed.
- */
-[data-theme='exclusive'] .bg-card {
-  background-color: rgb(var(--card) / 0.55);
-  backdrop-filter: blur(20px) saturate(150%);
-  -webkit-backdrop-filter: blur(20px) saturate(150%);
-}
-
-[data-theme='exclusive'] .border-border {
-  border-color: rgb(var(--border) / 0.55);
+  --on-accent: 255 255 255;
+  --brand: 254 225 1; /* #FEE101 */
+  --brand-subtle: 61 51 0; /* Tinted active states for dark background */
+  --success: 15 150 50;
+  --success-subtle: 220 245 220;
+  --success-border: 150 210 160;
+  --warning: 230 160 0;
+  --warning-subtle: 255 245 210;
+  --warning-border: 240 210 140;
+  --danger: 220 35 50;
+  --danger-subtle: 255 225 225;
+  --danger-border: 240 160 160;
+  --waveform: 255 0 128; /* #FF0080 - Hot pink for audio waves */
+  --waveform-idle: 255 0 128; /* Same pink for resting wave */
+  --flow: 254 225 1; /* Yellow fluid in pipeline */
+  --spectrum-0: 255 0 128;
+  --spectrum-1: 254 225 1;
+  --spectrum-2: 52 211 153;
 }
 
 @layer base {
@@ -162,7 +163,6 @@
     /* Tabular numerals everywhere: latency and score readouts update live,
        and proportional digits make the numbers jitter as they change. */
     font-variant-numeric: tabular-nums;
-    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
   }
 
   /* Dark and Exclusive are both dark surfaces — native form controls and
@@ -184,8 +184,27 @@
 
   body {
     @apply bg-canvas text-ink antialiased;
+    font-family: 'Figtree', ui-sans-serif, system-ui, sans-serif;
     font-synthesis-weight: none;
     text-rendering: optimizeLegibility;
+  }
+
+  /* Headings are the serif half of the pairing. Setting it here means every
+     `h1`–`h3` in the app picks it up without a class, which is what keeps
+     the two faces from drifting apart as pages get added. */
+  h1,
+  h2,
+  h3 {
+    font-family: 'Noto Serif', Georgia, serif;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+  }
+
+  /* Components that know their text is Hindi can opt into the dedicated
+     Devanagari face without changing the surrounding English UI. */
+  :lang(hi),
+  :lang(hi-IN) {
+    font-family: 'Amita', 'Noto Serif Devanagari', serif;
   }
 
   /* A visible, consistent focus ring — keyboard navigation is a first-class
@@ -219,7 +238,8 @@
 }
 
 @layer components {
-  /* Card: the single surface primitive. One border, no shadow by default. */
+  /* Card: a flat white panel separated from the canvas by a hairline and a
+     generous radius. No lift — Indus builds depth from the border alone. */
   .card {
     @apply rounded-lg border border-border bg-card;
   }
@@ -230,7 +250,7 @@
 
   /* Section label: small, uppercase, wide-tracked. */
   .label {
-    @apply text-2xs font-medium uppercase tracking-wider text-ink-secondary;
+    @apply text-2xs font-medium uppercase tracking-[0.12em] text-ink-secondary;
   }
 
   .mono {
@@ -262,6 +282,52 @@
      decorative rather than a readout. */
   .spectrum-tile {
     background-image: linear-gradient(135deg, rgb(var(--spectrum-0)), rgb(var(--spectrum-1)));
+  }
+
+  /**
+   * The pipeline panel's tube.
+   *
+   * Glass, not a progress bar stood on its end: two dark rims near the walls
+   * with a bright near-wall highlight just inside each — the way light
+   * actually catches a curved glass surface, brighter right at the edge of
+   * the curve than in the flat centre — sold with a real radius and an inset
+   * shadow standing in for wall thickness, not just a flat vertical gradient.
+   */
+  .tube-glass {
+    background-color: rgb(var(--card));
+    background-image: linear-gradient(
+      90deg,
+      rgb(var(--ink) / 0.22) 0%,
+      rgb(var(--card)) 8%,
+      rgb(var(--ink-tertiary) / 0.14) 22%,
+      transparent 46%,
+      transparent 54%,
+      rgb(var(--ink-tertiary) / 0.14) 78%,
+      rgb(var(--card)) 92%,
+      rgb(var(--ink) / 0.22) 100%
+    );
+    box-shadow: inset 0 0 0 1px rgb(var(--border));
+  }
+
+  /**
+   * The liquid. One flat neutral grey, no gradient, no sheen — the tube's
+   * rounded ends and the meniscus below are what read as "a fluid was
+   * poured in here"; a colour or a shine on top of that would just be noise
+   * on a panel that's meant to be glanceable.
+   */
+  .tube-fluid {
+    background-color: rgb(var(--flow));
+  }
+
+  /**
+   * Meniscus: the curved leading surface of the liquid, drawn as a squashed
+   * ellipse straddling the fill edge so half of it sits inside the fluid and
+   * half just below it. A flat-topped column of colour reads as a filled bar;
+   * this one curve is what makes it read as something that was poured.
+   */
+  .tube-meniscus {
+    background-color: rgb(var(--flow));
+    border-radius: 50%;
   }
 }
 

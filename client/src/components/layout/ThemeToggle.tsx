@@ -1,241 +1,167 @@
 /**
- * Theme picker: Light, Dark, and "HHGoa'26 Exclusive".
+ * Two-position lever toggle: HHGoa'26 Exclusive ← → Light.
  *
- * The first two are ordinary preference switches. Exclusive is deliberately
- * not — it's a novelty, and the whole point of it is that people want to
- * click it, so its row gets a shimmering tri-colour swatch, a bouncing
- * sparkle badge, and a confetti burst on selection instead of the restrained
- * treatment everything else in this app gets. That imbalance is intentional.
+ * Feels like a real physical switch — the thumb squishes on press, then
+ * stretches through the travel arc and snaps back with a soft bounce.
+ * All animation is CSS; no JS timers or RAF loops.
  */
-import { useCallback, useEffect, useId, useRef, useState } from 'react';
-import * as Popover from '@radix-ui/react-popover';
-import { Check, Moon, Palette, PartyPopper, Sparkles, Sun } from 'lucide-react';
+import { useId, useState } from 'react';
+import { useTheme } from '@/hooks/useTheme';
 import { cn } from '@/lib/utils';
-import { Button } from '@/components/ui/button';
-import { useTheme, type Theme } from '@/hooks/useTheme';
 
-const THEME_META: Record<
-  Theme,
-  { label: string; description: string; icon: React.ComponentType<{ className?: string }> }
-> = {
-  light: { label: 'Light', description: 'Bright surfaces, high contrast', icon: Sun },
-  dark: { label: 'Dark', description: 'Low-glare, easy at night', icon: Moon },
-  exclusive: { label: "HHGoa'26 Exclusive", description: 'Limited-run festival colours', icon: PartyPopper },
-};
+/* ─── keyframes injected once as a plain <style> tag ─── */
+const LEVER_STYLES = `
+@keyframes lever-squish {
+  0%   { transform: scaleX(1)   scaleY(1); }
+  20%  { transform: scaleX(0.72) scaleY(1.28); }
+  55%  { transform: scaleX(1.18) scaleY(0.88); }
+  75%  { transform: scaleX(0.94) scaleY(1.06); }
+  100% { transform: scaleX(1)   scaleY(1); }
+}
+`;
 
-const CONFETTI_COLORS = ['#036735', '#FEE101', '#FF0080'];
-const CONFETTI_COUNT = 14;
-const HINT_SEEN_KEY = 'goarag:theme-hint-seen';
-
-/** A tiny pulsing tri-colour dot on the trigger, gone for good after the
-    first open — a "there's something here" nudge, not a permanent nag. */
-function HintBadge() {
-  return (
-    <span
-      className="absolute -right-0.5 -top-0.5 flex size-2.5"
-      aria-hidden="true"
-    >
-      <span
-        className="absolute inline-flex h-full w-full animate-ping rounded-full opacity-75"
-        style={{
-          backgroundImage: `conic-gradient(${CONFETTI_COLORS[0]}, ${CONFETTI_COLORS[1]}, ${CONFETTI_COLORS[2]}, ${CONFETTI_COLORS[0]})`,
-        }}
-      />
-      <span
-        className="relative inline-flex size-2.5 rounded-full border border-white/40"
-        style={{
-          backgroundImage: `conic-gradient(${CONFETTI_COLORS[0]}, ${CONFETTI_COLORS[1]}, ${CONFETTI_COLORS[2]}, ${CONFETTI_COLORS[0]})`,
-        }}
-      />
-    </span>
-  );
+let styleInjected = false;
+function injectStyle() {
+  if (styleInjected || typeof document === 'undefined') return;
+  const el = document.createElement('style');
+  el.textContent = LEVER_STYLES;
+  document.head.appendChild(el);
+  styleInjected = true;
 }
 
-interface Fleck {
-  id: number;
-  color: string;
-  x: number;
-  y: number;
-  spin: number;
-  delayMs: number;
-}
-
-function makeFlecks(): Fleck[] {
-  return Array.from({ length: CONFETTI_COUNT }, (_, id) => {
-    const angle = (Math.PI * 2 * id) / CONFETTI_COUNT + (Math.random() - 0.5) * 0.6;
-    const distance = 26 + Math.random() * 30;
-    return {
-      id,
-      color: CONFETTI_COLORS[id % CONFETTI_COLORS.length] as string,
-      x: Math.cos(angle) * distance,
-      y: Math.sin(angle) * distance - 10, // biased upward — a burst, not a puddle
-      spin: (Math.random() - 0.5) * 540,
-      delayMs: Math.random() * 60,
-    };
-  });
-}
-
-/** Confetti flecks launched from the trigger button, self-removing after flight. */
-function ConfettiBurst({ onDone }: { onDone: () => void }) {
-  const [flecks] = useState(makeFlecks);
-
-  useEffect(() => {
-    const timer = setTimeout(onDone, 800);
-    return () => clearTimeout(timer);
-  }, [onDone]);
-
-  return (
-    <div className="pointer-events-none absolute inset-0 overflow-visible" aria-hidden="true">
-      {flecks.map((fleck) => (
-        <span
-          key={fleck.id}
-          className="absolute left-1/2 top-1/2 size-1.5 animate-confetti-burst rounded-[1px]"
-          style={
-            {
-              backgroundColor: fleck.color,
-              animationDelay: `${fleck.delayMs}ms`,
-              '--confetti-x': `${fleck.x}px`,
-              '--confetti-y': `${fleck.y}px`,
-              '--confetti-spin': `${fleck.spin}deg`,
-            } as React.CSSProperties
-          }
-        />
-      ))}
-    </div>
-  );
-}
-
-/** The tri-colour preview swatch — a static conic split with a sheen sweeping across it. */
-function ExclusiveSwatch({ className }: { className?: string }) {
-  return (
-    <span
-      className={cn('relative block overflow-hidden rounded-full', className)}
-      style={{
-        backgroundImage: `conic-gradient(from 90deg, ${CONFETTI_COLORS[0]} 0deg 120deg, ${CONFETTI_COLORS[1]} 120deg 240deg, ${CONFETTI_COLORS[2]} 240deg 360deg)`,
-      }}
-    >
-      <span
-        className="absolute inset-0 animate-shimmer"
-        style={{
-          backgroundImage:
-            'linear-gradient(115deg, transparent 30%, rgb(255 255 255 / 0.55) 48%, transparent 66%)',
-          backgroundSize: '250% 100%',
-        }}
-      />
-    </span>
-  );
-}
-
-function ThemeSwatch({ theme }: { theme: Theme }) {
-  if (theme === 'exclusive') return <ExclusiveSwatch className="size-8" />;
-  const tone = theme === 'dark' ? 'bg-[#0B0D10]' : 'bg-white';
-  return (
-    <span className={cn('block size-8 rounded-full border border-border-strong', tone)}>
-      <span
-        className={cn(
-          'block size-full rounded-full',
-          theme === 'dark' ? 'bg-[radial-gradient(circle_at_35%_35%,#2F6FED_0%,transparent_55%)]' : '',
-        )}
-      />
-    </span>
-  );
-}
+/* ─── colours ─── */
+const HHG_GREEN  = '#036834';
+const HHG_PINK   = '#FF0080';
+const HHG_YELLOW = '#FEE101';
 
 export function ThemeToggle() {
+  injectStyle();
+
   const { theme, setTheme } = useTheme();
-  const [open, setOpen] = useState(false);
-  const [bursting, setBursting] = useState(false);
-  const [hintSeen, setHintSeen] = useState(
-    () => typeof window !== 'undefined' && window.localStorage.getItem(HINT_SEEN_KEY) === '1',
-  );
-  const headingId = useId();
-  const clearBurst = useRef(() => setBursting(false));
+  const id = useId();
+  const [clickCount, setClickCount] = useState(0);
 
-  const select = useCallback(
-    (next: Theme) => {
-      if (next === 'exclusive' && theme !== 'exclusive') setBursting(true);
-      setTheme(next);
-      setOpen(false);
-    },
-    [theme, setTheme],
-  );
+  /* only two positions: exclusive (left) and light (right) */
+  const isExclusive = theme === 'exclusive';
 
-  const handleOpenChange = useCallback((next: boolean) => {
-    setOpen(next);
-    if (next) {
-      window.localStorage.setItem(HINT_SEEN_KEY, '1');
-      setHintSeen(true);
-    }
-  }, []);
-
-  const ActiveIcon = THEME_META[theme].icon;
+  function toggle() {
+    setTheme(isExclusive ? 'light' : 'exclusive');
+    setClickCount((n) => n + 1);
+  }
 
   return (
-    <Popover.Root open={open} onOpenChange={handleOpenChange}>
-      <Popover.Trigger asChild>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          className={cn('relative', theme === 'exclusive' && 'text-[#FF0080] hover:text-[#FF0080]')}
-          aria-label={`Theme: ${THEME_META[theme].label}. Click to change.${hintSeen ? '' : ' A new Exclusive theme is available.'}`}
-        >
-          <ActiveIcon className={theme === 'exclusive' ? 'animate-pulse' : undefined} />
-          {!hintSeen && !bursting ? <HintBadge /> : null}
-          {bursting ? <ConfettiBurst onDone={clearBurst.current} /> : null}
-        </Button>
-      </Popover.Trigger>
+    <div className="flex items-center gap-2" role="group" aria-label="Theme switcher">
 
-      <Popover.Portal>
-        <Popover.Content
-          align="end"
-          sideOffset={8}
-          className="z-50 w-64 animate-fade-in rounded-lg border border-border bg-card p-1.5 shadow-popover"
-          aria-labelledby={headingId}
-        >
-          <p id={headingId} className="flex items-center gap-1.5 px-2 py-1.5 text-2xs font-medium uppercase tracking-wider text-ink-secondary">
-            <Palette className="size-3" />
-            Theme
-          </p>
+      {/* Left label — HHGoa'26 */}
+      <span
+        className={cn(
+          'select-none text-[10px] font-semibold tracking-wide transition-all duration-300',
+          isExclusive ? 'opacity-100' : 'opacity-35',
+        )}
+        style={{ color: isExclusive ? HHG_PINK : undefined }}
+        aria-hidden="true"
+      >
+        HHGoa&apos;26
+      </span>
 
-          <div className="space-y-0.5">
-            {(Object.keys(THEME_META) as Theme[]).map((key) => {
-              const meta = THEME_META[key];
-              const selected = theme === key;
-              const isExclusive = key === 'exclusive';
-              return (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() => select(key)}
-                  className={cn(
-                    'group flex w-full items-center gap-2.5 rounded-md p-2 text-left transition-all duration-150',
-                    selected ? 'bg-subtle' : 'hover:bg-subtle hover:scale-[1.02]',
-                    isExclusive &&
-                      !selected &&
-                      'ring-1 ring-inset ring-[#FF0080]/30 hover:ring-[#FF0080]/60 hover:shadow-[0_0_16px_-4px_#FF0080]',
-                  )}
-                >
-                  <ThemeSwatch theme={key} />
-                  <span className="min-w-0 flex-1">
-                    <span className="flex items-center gap-1.5">
-                      <span className="truncate text-xs font-medium text-ink">{meta.label}</span>
-                      {isExclusive ? (
-                        <Sparkles className="size-3 shrink-0 animate-pulse text-[#FEE101]" />
-                      ) : null}
-                    </span>
-                    <span className="block truncate text-2xs text-ink-secondary">{meta.description}</span>
-                  </span>
-                  {selected ? (
-                    <Check
-                      className={cn('size-4 shrink-0', isExclusive ? 'text-[#FF0080]' : 'text-ink')}
-                    />
-                  ) : null}
-                </button>
-              );
-            })}
-          </div>
-        </Popover.Content>
-      </Popover.Portal>
-    </Popover.Root>
+      {/* ── Track ── */}
+      <button
+        id={id}
+        type="button"
+        role="switch"
+        aria-checked={!isExclusive}
+        aria-label={isExclusive ? "Switch to Light theme" : "Switch to HHGoa'26 theme"}
+        onClick={toggle}
+        className={cn(
+          'relative h-6 w-11 shrink-0 cursor-pointer rounded-full border transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2',
+        )}
+        style={{
+          /* track colour shifts between the two themes */
+          backgroundColor: isExclusive ? HHG_GREEN : 'hsl(0 0% 90%)',
+          borderColor:     isExclusive ? '#024f28' : 'hsl(0 0% 78%)',
+          boxShadow: isExclusive
+            ? `inset 0 1px 4px rgba(0,0,0,0.45), 0 0 0 1px ${HHG_GREEN}`
+            : 'inset 0 1px 3px rgba(0,0,0,0.15)',
+          focusVisibleRingColor: isExclusive ? HHG_PINK : undefined,
+        } as React.CSSProperties}
+      >
+        {/* ── Thumb — re-keyed on every click to restart the CSS animation ── */}
+        <span
+          key={clickCount}
+          aria-hidden="true"
+          className={cn(
+            'absolute top-0.5 flex size-5 items-center justify-center rounded-full shadow-md transition-all',
+          )}
+          style={{
+            /* slide: left=exclusive, right=light */
+            left: isExclusive ? '2px' : 'calc(100% - 22px)',
+            /* spring-eased travel */
+            transitionProperty: 'left, background-color, box-shadow',
+            transitionDuration: '320ms',
+            transitionTimingFunction: 'cubic-bezier(0.34, 1.56, 0.64, 1)',
+            background: isExclusive
+              ? `radial-gradient(circle at 38% 38%, ${HHG_YELLOW}, #d4a500)`
+              : 'radial-gradient(circle at 38% 38%, #ffffff, #e2e2e2)',
+            boxShadow: isExclusive
+              ? `0 1px 4px rgba(0,0,0,0.5), 0 0 6px 1px ${HHG_YELLOW}55`
+              : '0 1px 3px rgba(0,0,0,0.25)',
+            /* squish-stretch plays on every click */
+            animation: 'lever-squish 420ms cubic-bezier(0.34, 1.56, 0.64, 1)',
+            /* re-trigger by forcing new animation on each render — we key
+               the animation name so React always writes it fresh */
+          }}
+        >
+          {/* tiny icon inside thumb */}
+          {isExclusive ? (
+            /* festival spark */
+            <svg viewBox="0 0 12 12" width="9" height="9" fill="none" aria-hidden="true">
+              <path
+                d="M6 1 L6.6 4.5 L10 4.5 L7.2 6.8 L8.1 10 L6 7.8 L3.9 10 L4.8 6.8 L2 4.5 L5.4 4.5 Z"
+                fill={HHG_GREEN}
+                opacity="0.85"
+              />
+            </svg>
+          ) : (
+            /* sun rays */
+            <svg viewBox="0 0 12 12" width="9" height="9" fill="none" aria-hidden="true">
+              <circle cx="6" cy="6" r="2.4" fill="#f59e0b" />
+              {[0,45,90,135,180,225,270,315].map((deg) => (
+                <line
+                  key={deg}
+                  x1="6" y1="6"
+                  x2={6 + Math.cos((deg * Math.PI) / 180) * 4.5}
+                  y2={6 + Math.sin((deg * Math.PI) / 180) * 4.5}
+                  stroke="#f59e0b"
+                  strokeWidth="1"
+                  strokeLinecap="round"
+                />
+              ))}
+            </svg>
+          )}
+        </span>
+
+        {/* festival-colour inner glow when exclusive */}
+        {isExclusive && (
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 rounded-full"
+            style={{
+              background: `linear-gradient(90deg, ${HHG_PINK}22 0%, transparent 60%)`,
+            }}
+          />
+        )}
+      </button>
+
+      {/* Right label — Light */}
+      <span
+        className={cn(
+          'select-none text-[10px] font-semibold tracking-wide transition-all duration-300',
+          !isExclusive ? 'opacity-100' : 'opacity-35',
+        )}
+        aria-hidden="true"
+      >
+        Light
+      </span>
+    </div>
   );
 }

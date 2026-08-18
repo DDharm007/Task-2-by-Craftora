@@ -143,8 +143,8 @@ export function DashboardPage() {
               title="The index is empty"
               description={
                 <>
-                  Run <code className="font-mono">npm run dataset:download</code> then{' '}
-                  <code className="font-mono">npm run index</code> to populate the vector store.
+                  Run <code className="font-mono">npm run index</code> to read the dataset online
+                  and populate the vector store.
                 </>
               }
             />

@@ -3,9 +3,8 @@ import type { Config } from 'tailwindcss';
 /**
  * Design tokens.
  *
- * A restrained instrument-panel palette: blue-shifted neutral surfaces, one
- * deep ultramarine accent for primary actions, and colour otherwise reserved
- * for state (success / warning / error).
+ * A warm, editorial workspace palette: paper neutrals, black primary actions,
+ * and colour reserved for meaningful system state.
  *
  * There is exactly one gradient in the system — the evidence spectrum defined
  * in styles/index.css — and it is a readout, not an ornament: every 0-1
@@ -48,6 +47,16 @@ export default {
         accent: {
           DEFAULT: themedColor('accent'),
           hover: themedColor('accent-hover'),
+          /** Text/icon colour that sits *on* the accent. Light puts white on
+              near-black, Dark puts near-black on white — same component, and
+              neither has to branch on the theme. */
+          ink: themedColor('on-accent'),
+        },
+        /** The single warm colour: active navigation and the icon inside it.
+            Never a button — that's what `accent` is for. */
+        brand: {
+          DEFAULT: themedColor('brand'),
+          subtle: themedColor('brand-subtle'),
         },
         success: {
           DEFAULT: themedColor('success'),
@@ -74,7 +83,9 @@ export default {
         },
       },
       fontFamily: {
-        sans: ['Poppins', 'system-ui', '-apple-system', 'Segoe UI', 'sans-serif'],
+        // The pairing: geometric grotesque for UI and body, serif for display.
+        sans: ['Figtree', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        serif: ['Noto Serif', 'Georgia', 'serif'],
         mono: ['JetBrains Mono', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
       },
       fontSize: {
@@ -86,18 +97,27 @@ export default {
         '18': '4.5rem',
       },
       borderRadius: {
-        // Restrained radii — cards, not pills.
-        DEFAULT: '6px',
-        md: '6px',
-        lg: '8px',
-        xl: '10px',
+        // Softer than before: Indus rounds everything generously and takes
+        // controls all the way to a pill (`rounded-full` on buttons).
+        DEFAULT: '10px',
+        md: '12px',
+        lg: '16px',
+        xl: '20px',
       },
       boxShadow: {
-        // Small, single-layer shadows only.
-        xs: '0 1px 2px 0 rgb(17 24 39 / 0.05)',
-        sm: '0 1px 3px 0 rgb(17 24 39 / 0.08), 0 1px 2px -1px rgb(17 24 39 / 0.04)',
-        md: '0 4px 12px -2px rgb(17 24 39 / 0.08), 0 2px 4px -2px rgb(17 24 39 / 0.04)',
-        popover: '0 8px 24px -4px rgb(17 24 39 / 0.12), 0 2px 6px -2px rgb(17 24 39 / 0.06)',
+        /**
+         * Effectively flat.
+         *
+         * Indus separates surfaces with a hairline border and whitespace, not
+         * with lift — a page of stacked cards stays calm because nothing is
+         * competing to float. The tokens survive so call sites don't churn,
+         * but they are barely-there; only `popover` keeps real depth, because
+         * a menu genuinely does hover above the page it covers.
+         */
+        xs: '0 1px 0 0 rgb(20 20 20 / 0.02)',
+        sm: '0 1px 2px 0 rgb(20 20 20 / 0.03)',
+        md: '0 2px 6px -4px rgb(20 20 20 / 0.06)',
+        popover: '0 12px 32px -18px rgb(20 20 20 / 0.22)',
       },
       keyframes: {
         'fade-in': {

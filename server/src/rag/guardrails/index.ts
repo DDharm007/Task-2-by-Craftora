@@ -17,10 +17,12 @@
  */
 import type {
   ConfidenceBreakdown,
+  ConfidenceFactorKey,
   GuardrailReport,
   GuardrailResult,
   RetrievedChunk,
 } from '@goarag/shared';
+import { CONFIDENCE_WEIGHTS } from '@goarag/shared';
 import { config } from '../../config/env.js';
 import { now } from '../../utils/async.js';
 import { contentTokens, coverage, splitSentences, tokenize } from '../../utils/text.js';
@@ -166,6 +168,16 @@ export interface RetrievalGuardrailOutput {
 }
 
 /**
+ * The similarity threshold must use the dense cosine score, never the RRF
+ * score. RRF is a rank-only signal: with k=60, even the first result from two
+ * retrieval arms is only about 0.033. Comparing that to a semantic threshold
+ * such as 0.10 makes good hybrid matches look like failures.
+ */
+function semanticSimilarity(chunk: RetrievedChunk): number {
+  return Math.max(0, Math.min(1, chunk.denseScore ?? 0));
+}
+
+/**
  * Evidence guardrails. Decide whether retrieval produced anything worth
  * sending to the LLM — the single most effective defence against
  * hallucination is simply not asking the question when the evidence is thin.
@@ -174,7 +186,10 @@ export function runRetrievalGuardrails(input: RetrievalGuardrailInput): Retrieva
   const { query, chunks, agreement } = input;
   const results: GuardrailResult[] = [];
 
-  const scores = chunks.map((chunk) => chunk.score);
+  // Keep similarity on one stable scale regardless of whether reranking is
+  // enabled. The reranker decides order; dense cosine decides whether the
+  // corpus semantically supports the query.
+  const scores = chunks.map(semanticSimilarity);
   const topScore = scores.length > 0 ? Math.max(...scores) : 0;
   const meanScore = scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : 0;
 
@@ -204,9 +219,13 @@ export function runRetrievalGuardrails(input: RetrievalGuardrailInput): Retrieva
         chunks.length === 0
           ? 'Retrieval returned no chunks'
           : failed
-            ? `Best chunk scored ${topScore.toFixed(3)}, below the ${threshold} threshold`
-            : `Best chunk scored ${topScore.toFixed(3)}`,
-        chunks.slice(0, 3).map((chunk) => `${chunk.id.slice(0, 8)}: ${chunk.score.toFixed(3)}`),
+            ? `Best dense semantic similarity was ${topScore.toFixed(3)}, below the ${threshold} threshold`
+            : `Best dense semantic similarity was ${topScore.toFixed(3)}`,
+        chunks
+          .slice()
+          .sort((a, b) => semanticSimilarity(b) - semanticSimilarity(a))
+          .slice(0, 3)
+          .map((chunk) => `${chunk.id.slice(0, 8)}: dense=${semanticSimilarity(chunk).toFixed(4)}`),
         t,
         failed ? 'block' : 'pass',
       ),
@@ -245,7 +264,8 @@ export function runRetrievalGuardrails(input: RetrievalGuardrailInput): Retrieva
     // Do the retrieved chunks actually corroborate each other, or is the top
     // hit an isolated outlier? Agreement between the retrieval arms plus
     // score consistency across the top chunks is a good proxy.
-    const spread = scores.length > 1 ? topScore - (scores[scores.length - 1] as number) : 0;
+    const rankedScores = [...scores].sort((a, b) => b - a);
+    const spread = scores.length > 1 ? topScore - (rankedScores[rankedScores.length - 1] as number) : 0;
     const consistency = topScore > 0 ? 1 - Math.min(1, spread / Math.max(topScore, 1e-6)) : 0;
     const verification = 0.5 * agreement + 0.3 * consistency + 0.2 * Math.min(1, chunks.length / 3);
     const weak = verification < 0.25;
@@ -442,12 +462,19 @@ export function computeConfidence(input: {
 }): ConfidenceBreakdown {
   const { topScore, meanScore, agreement, groundedness, contextCoverage } = input;
 
-  const overall =
-    0.35 * clamp01(topScore) +
-    0.15 * clamp01(meanScore) +
-    0.3 * clamp01(groundedness) +
-    0.1 * clamp01(agreement) +
-    0.1 * clamp01(contextCoverage);
+  // Weights come from the shared constant so the UI explains exactly the blend
+  // that produced this number, rather than a copy that can drift out of sync.
+  const values: Record<ConfidenceFactorKey, number> = {
+    topScore: clamp01(topScore),
+    groundedness: clamp01(groundedness),
+    meanScore: clamp01(meanScore),
+    retrievalAgreement: clamp01(agreement),
+    contextCoverage: clamp01(contextCoverage),
+  };
+  const overall = CONFIDENCE_WEIGHTS.reduce(
+    (sum, factor) => sum + factor.weight * values[factor.key],
+    0,
+  );
 
   const threshold = config.guardrails.confidenceThreshold;
 

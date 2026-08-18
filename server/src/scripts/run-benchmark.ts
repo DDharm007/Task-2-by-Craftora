@@ -42,6 +42,38 @@ function bar(value: number, width = 24): string {
   return `${'█'.repeat(filled)}${'░'.repeat(width - filled)}`;
 }
 
+/**
+ * The task spec's budget, in milliseconds, for chunking + vector retrieval +
+ * everything through to the final ranked context.
+ */
+const LATENCY_BUDGET_MS = 50;
+
+/**
+ * Pass/fail against the budget, judged at p100 rather than p50.
+ *
+ * "Under 50ms" is only a meaningful claim if the slowest measured query also
+ * clears it — a p50 that passes while the tail runs at 300ms describes a
+ * pipeline most users experience as slow. p50 and p70 are printed alongside
+ * because the spec asks for them, but p100 is what decides the verdict.
+ */
+function budgetSection(stats: LatencyPercentiles): string[] {
+  if (stats.count === 0) return [];
+  const pass = stats.p100 <= LATENCY_BUDGET_MS;
+  const headroom = LATENCY_BUDGET_MS - stats.p100;
+  return [
+    `  Latency budget  (query text in → ranked context out, ≤ ${LATENCY_BUDGET_MS}ms)`,
+    '  ─────────────────────────────────────────────────────────────',
+    `    p50   ${formatMs(stats.p50).padStart(9)}`,
+    `    p70   ${formatMs(stats.p70).padStart(9)}`,
+    `    p100  ${formatMs(stats.p100).padStart(9)}   ← the verdict is taken here`,
+    '',
+    pass
+      ? `    ✔ PASS — ${formatMs(headroom)} of headroom at the slowest query (n=${stats.count})`
+      : `    ✖ FAIL — over by ${formatMs(-headroom)} at the slowest query (n=${stats.count})`,
+    '',
+  ];
+}
+
 async function main(): Promise<void> {
   const sampleSize = Number(argValue('--sample') ?? 10);
   const generation = process.argv.includes('--generation');
@@ -97,8 +129,10 @@ async function main(): Promise<void> {
       percentileRow('retrieval', result.latency.retrieval),
       percentileRow('reranking', result.latency.reranking),
       ...(generation ? [percentileRow('generation', result.latency.generation)] : []),
-      percentileRow('total', result.latency.total),
+      percentileRow('retrieval path', result.latency.retrievalPath),
+      ...(generation ? [percentileRow('total (+LLM)', result.latency.total)] : []),
       '',
+      ...budgetSection(result.latency.retrievalPath),
       '  Summary',
       '  ───────',
       `    queries evaluated  ${quality.evaluatedQueries}`,

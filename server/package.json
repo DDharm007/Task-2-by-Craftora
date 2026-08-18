@@ -12,8 +12,10 @@
     "dataset:download": "tsx src/scripts/download-dataset.ts",
     "index": "tsx src/scripts/index-dataset.ts",
     "index:reset": "tsx src/scripts/index-dataset.ts --reset",
+    "index:reembed": "tsx src/scripts/reembed-index.ts",
     "benchmark": "tsx src/scripts/run-benchmark.ts",
-    "verify": "tsx src/scripts/verify.ts"
+    "verify": "tsx src/scripts/verify.ts",
+    "verify:cache": "tsx src/scripts/verify-cache.ts"
   },
   "dependencies": {
     "@huggingface/hub": "^2.15.0",

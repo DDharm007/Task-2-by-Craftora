@@ -7,6 +7,7 @@
 import { Router } from 'express';
 import {
   benchmarkQuerySchema,
+  datasetSuggestionsQuerySchema,
   queryRequestSchema,
   speakRequestSchema,
   statsQuerySchema,
@@ -22,6 +23,7 @@ import {
 } from '../middleware/index.js';
 import {
   getBenchmark,
+  getDatasetSuggestions,
   getHealth,
   getStats,
   postQuery,
@@ -36,6 +38,11 @@ export const apiRouter: Router = Router();
 // ── reads ────────────────────────────────────────────────────────────────────
 apiRouter.get('/health', asyncHandler(getHealth));
 apiRouter.get('/stats', validateQuery(statsQuerySchema), asyncHandler(getStats));
+apiRouter.get(
+  '/dataset/suggestions',
+  validateQuery(datasetSuggestionsQuerySchema),
+  asyncHandler(getDatasetSuggestions),
+);
 
 // A benchmark run is expensive; the shared query limiter keeps it from being
 // used as an amplification vector.

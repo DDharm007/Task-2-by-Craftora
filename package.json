@@ -27,9 +27,11 @@
     "dataset:download": "npm run dataset:download --workspace server",
     "index": "npm run index --workspace server",
     "index:reset": "npm run index:reset --workspace server",
+    "index:reembed": "npm run index:reembed --workspace server",
     "benchmark": "npm run benchmark --workspace server",
     "verify": "npm run verify --workspace server",
-    "setup": "npm install && npm run build:shared && npm run dataset:download && npm run index",
+    "verify:cache": "npm run verify:cache --workspace server",
+    "setup": "npm install && npm run build:shared && npm run index",
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down"
   },

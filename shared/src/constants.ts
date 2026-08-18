@@ -90,3 +90,35 @@ export const API_ROUTES = {
   health: '/api/health',
   stats: '/api/stats',
 } as const;
+
+/**
+ * How the confidence score is blended.
+ *
+ * Single source of truth: the server multiplies by these to produce
+ * `ConfidenceBreakdown.overall`, and the UI reads the same values to explain
+ * it. They were previously duplicated as hardcoded strings in the panel, which
+ * meant tuning a weight on the server left the UI confidently reporting the
+ * old split.
+ *
+ * Ordered heaviest first — the UI renders them in this order, so the stacked
+ * contribution bar reads left to right from most to least influential.
+ *
+ * Weights favour the top reranked score (the most direct measure of whether
+ * the evidence answers the question) and groundedness (whether the answer
+ * actually used it), with arm agreement and coverage as corroborating signals.
+ * They must sum to 1.
+ */
+export const CONFIDENCE_WEIGHTS = [
+  { key: 'topScore', label: 'Top semantic match', weight: 0.35 },
+  { key: 'groundedness', label: 'Groundedness', weight: 0.3 },
+  { key: 'meanScore', label: 'Mean semantic match', weight: 0.15 },
+  { key: 'retrievalAgreement', label: 'Arm agreement', weight: 0.1 },
+  { key: 'contextCoverage', label: 'Query coverage', weight: 0.1 },
+] as const;
+
+export type ConfidenceFactorKey = (typeof CONFIDENCE_WEIGHTS)[number]['key'];
+
+/** Look up one factor's weight. */
+export function confidenceWeight(key: ConfidenceFactorKey): number {
+  return CONFIDENCE_WEIGHTS.find((factor) => factor.key === key)?.weight ?? 0;
+}

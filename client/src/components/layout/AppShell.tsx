@@ -2,12 +2,25 @@
  * Application shell: fixed sidebar, top bar, scrolling content area.
  *
  * The sidebar collapses to a slide-over below `lg`, so the console remains
- * usable on a phone without a separate mobile layout.
+ * usable on a phone without a separate mobile layout. Independently, on `lg`
+ * and up it can be toggled down to a narrow icon rail — a desktop preference
+ * (more room for the console's two-column layout) rather than a responsive
+ * fallback, so the two collapse behaviours are driven by separate state and
+ * the rail only ever applies at the `lg:` breakpoint.
  */
 import { useEffect, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { AudioLines, BarChart3, LayoutDashboard, Menu, X, Circle } from 'lucide-react';
+import {
+  AudioLines,
+  BarChart3,
+  LayoutDashboard,
+  Menu,
+  PanelLeftClose,
+  PanelLeftOpen,
+  X,
+  Circle,
+} from 'lucide-react';
 import type { HealthResponse } from '@goarag/shared';
 import { fetchHealth } from '@/lib/api';
 import { cn } from '@/lib/utils';
@@ -15,6 +28,11 @@ import { Button } from '@/components/ui/button';
 import { Tooltip } from '@/components/ui/primitives';
 import { ThemeToggle } from '@/components/layout/ThemeToggle';
 import { AmbientGlow } from '@/components/layout/AmbientGlow';
+import { useTheme } from '@/hooks/useTheme';
+
+const COLLAPSED_KEY = 'goarag:sidebar-collapsed';
+const RAIL_WIDTH = 'lg:w-[76px]';
+const FULL_WIDTH = 'lg:w-60';
 
 const NAV_ITEMS = [
   { to: '/', label: 'Console', icon: AudioLines, description: 'Ask by voice or text' },
@@ -49,11 +67,19 @@ function StatusDot({ health }: { health: HealthResponse | undefined }) {
 }
 
 export function AppShell({ children }: { children: React.ReactNode }) {
+  const { theme } = useTheme();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(
+    () => typeof window !== 'undefined' && window.localStorage.getItem(COLLAPSED_KEY) === '1',
+  );
   const location = useLocation();
 
   // Close the slide-over whenever navigation happens.
   useEffect(() => setMobileOpen(false), [location.pathname]);
+
+  useEffect(() => {
+    window.localStorage.setItem(COLLAPSED_KEY, collapsed ? '1' : '0');
+  }, [collapsed]);
 
   const { data: health } = useQuery({
     queryKey: ['health'],
@@ -74,32 +100,52 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       {/* Sidebar */}
       <aside
         className={cn(
-          'fixed inset-y-0 left-0 z-40 flex w-60 flex-col border-r border-border bg-subtle transition-transform duration-150 lg:static lg:translate-x-0',
+          // White sidebar against the warm paper canvas, rather than the other
+          // way round — it gives the tinted active row something to sit on.
+          // Width is `w-60` unconditionally below `lg` (the collapse toggle is
+          // a desktop-only affordance, see the button below) and switches
+          // between the rail and full widths at `lg` based on `collapsed`.
+          'fixed inset-y-0 left-0 z-40 flex w-60 flex-col overflow-hidden border-r border-border bg-card transition-[transform,width] duration-150 lg:static lg:translate-x-0',
+          collapsed ? RAIL_WIDTH : FULL_WIDTH,
           mobileOpen ? 'translate-x-0' : '-translate-x-full',
         )}
       >
-        <div className="flex h-16 items-center justify-between border-b border-border px-4">
-          <div className="flex items-center gap-2.5">
-            {/* The mark is white artwork, so it needs the saturated tile behind
-                it — on the light sidebar it would be invisible. This is the one
-                place the evidence ramp is decorative rather than a readout. */}
-            <div className="spectrum-tile flex size-11 shrink-0 items-center justify-center rounded-lg">
-              <img
-                src="/goarag-logo.png"
-                alt=""
-                aria-hidden="true"
-                className="size-8 object-contain"
-              />
-            </div>
-            <div className="flex items-baseline">
-              <span style={{ fontFamily: "'Yatra One', cursive" }} className="text-2xl font-bold tracking-wide mr-0.5">गोवा</span>
-              <span className="text-base font-semibold tracking-tight">RAG</span>
-            </div>
-          </div>
+        {/* `relative` + an absolutely-positioned close button, rather than
+            `justify-between` with a `lg:hidden` sibling: with only one
+            visible child, `justify-between` collapses to flex-start and the
+            lockup pins to the left instead of centring — which is exactly
+            what was happening. Positioning the (mobile-only) close button out
+            of flow lets the wordmark center in the row unconditionally. */}
+        <div className="relative flex h-16 shrink-0 items-center justify-center border-b border-border px-4">
+          <span
+            className={cn(
+              'flex items-center justify-center',
+              collapsed ? 'lg:flex-col lg:leading-[1.15]' : 'gap-0.5 leading-none',
+            )}
+          >
+            <span
+              className={cn(
+                'font-bold tracking-tight',
+                theme === 'exclusive' ? 'text-[#FF0080]' : 'text-ink',
+                collapsed ? 'text-2xl lg:text-xl' : 'text-[1.35rem]',
+              )}
+              style={theme === 'exclusive' ? { WebkitTextStroke: '1px white' } : undefined}
+            >
+              Goa
+            </span>
+            <span
+              className={cn(
+                'font-bold tracking-tight text-brand',
+                collapsed ? 'text-2xl lg:text-xl' : 'text-[1.35rem]',
+              )}
+            >
+              RAG
+            </span>
+          </span>
           <Button
             variant="ghost"
             size="icon-sm"
-            className="lg:hidden"
+            className="absolute right-4 top-1/2 -translate-y-1/2 lg:hidden"
             onClick={() => setMobileOpen(false)}
             aria-label="Close navigation"
           >
@@ -108,55 +154,100 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
 
         <nav className="flex-1 space-y-0.5 p-2">
-          {NAV_ITEMS.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.to === '/'}
-              className={({ isActive }) =>
-                cn(
-                  'flex items-start gap-2.5 rounded px-2.5 py-2 text-sm transition-colors',
-                  isActive
-                    ? 'bg-card font-medium text-ink shadow-xs'
-                    : 'text-ink-secondary hover:bg-card/70 hover:text-ink',
-                )
-              }
-            >
-              <item.icon className="mt-0.5 size-4 shrink-0" />
-              <span className="min-w-0">
-                <span className="block truncate">{item.label}</span>
-                <span className="block truncate text-2xs text-ink-tertiary">{item.description}</span>
-              </span>
-            </NavLink>
-          ))}
+          {NAV_ITEMS.map((item) => {
+            const link = (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                end={item.to === '/'}
+                // The active row is the one place the warm brand colour
+                // appears: a soft tint behind it and the icon picked out in
+                // full strength. Everything else in the sidebar stays
+                // neutral, so "you are here" is the only thing colour says.
+                className={({ isActive }) =>
+                  cn(
+                    'group flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm transition-colors',
+                    collapsed && 'justify-center',
+                    isActive
+                      ? 'bg-brand-subtle font-medium text-ink'
+                      : 'text-ink-secondary hover:bg-subtle hover:text-ink',
+                  )
+                }
+              >
+                {({ isActive }: { isActive: boolean }) => (
+                  <>
+                    <item.icon
+                      className={cn('size-4 shrink-0', isActive && 'text-brand')}
+                    />
+                    {!collapsed ? (
+                      <span className="min-w-0">
+                        <span className="block truncate">{item.label}</span>
+                        <span className="block truncate text-2xs text-ink-tertiary">
+                          {item.description}
+                        </span>
+                      </span>
+                    ) : null}
+                  </>
+                )}
+              </NavLink>
+            );
+            // The label moves from inline text to a tooltip when collapsed —
+            // it has to keep existing somewhere, or the rail becomes a row of
+            // unlabelled icons no one can identify without clicking through.
+            return collapsed ? (
+              <Tooltip key={item.to} content={item.label} side="right">
+                {link}
+              </Tooltip>
+            ) : (
+              link
+            );
+          })}
         </nav>
 
-        <div className="border-t border-border p-3">
-          <dl className="space-y-1 text-2xs text-ink-secondary">
-            <div className="flex justify-between gap-2">
-              <dt>Model</dt>
-              <dd
-                className="truncate font-mono"
-                title={health?.models.llm}
-              >
-                {health ? shortModelName(health.models.llm) : '—'}
-              </dd>
-            </div>
-            <div className="flex justify-between gap-2">
-              <dt>Embeddings</dt>
-              <dd
-                className="truncate font-mono"
-                title={health?.models.embedding}
-              >
-                {health ? shortModelName(health.models.embedding) : '—'}
-              </dd>
-            </div>
-            <div className="flex justify-between gap-2">
-              <dt>Version</dt>
-              <dd className="font-mono">{health?.version ?? '—'}</dd>
-            </div>
-          </dl>
+        {/* Collapse toggle — desktop only; the mobile slide-over always opens
+            full width, so this control has no meaning below `lg`. */}
+        <div className="hidden border-t border-border p-2 lg:block">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setCollapsed((value) => !value)}
+            aria-pressed={collapsed}
+            aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            className={cn('w-full', collapsed ? 'justify-center px-0' : 'justify-start')}
+          >
+            {collapsed ? <PanelLeftOpen /> : <PanelLeftClose />}
+            {!collapsed ? 'Collapse' : null}
+          </Button>
         </div>
+
+        {!collapsed ? (
+          <div className="border-t border-border p-3">
+            <dl className="space-y-1 text-2xs text-ink-secondary">
+              <div className="flex justify-between gap-2">
+                <dt>Model</dt>
+                <dd
+                  className="truncate font-mono"
+                  title={health?.models.llm}
+                >
+                  {health ? shortModelName(health.models.llm) : '—'}
+                </dd>
+              </div>
+              <div className="flex justify-between gap-2">
+                <dt>Embeddings</dt>
+                <dd
+                  className="truncate font-mono"
+                  title={health?.models.embedding}
+                >
+                  {health ? shortModelName(health.models.embedding) : '—'}
+                </dd>
+              </div>
+              <div className="flex justify-between gap-2">
+                <dt>Version</dt>
+                <dd className="font-mono">{health?.version ?? '—'}</dd>
+              </div>
+            </dl>
+          </div>
+        ) : null}
       </aside>
 
       {mobileOpen ? (
@@ -181,7 +272,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             >
               <Menu />
             </Button>
-            <h1 className="text-sm font-medium">
+            {/* A location label rather than display copy, so it stays on the
+                UI face while card and page headings take the serif. */}
+            <h1 className="font-sans text-sm font-medium tracking-normal">
               {NAV_ITEMS.find((item) =>
                 item.to === '/' ? location.pathname === '/' : location.pathname.startsWith(item.to),
               )?.label ?? 'GoaRAG'}

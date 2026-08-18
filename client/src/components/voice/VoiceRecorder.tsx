@@ -6,55 +6,16 @@
  * decorative animation — when it is flat, the mic genuinely is not picking
  * anything up, which makes "why did it not hear me?" self-diagnosing.
  */
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import { Mic, Square, X, AlertCircle } from 'lucide-react';
 import { cn, formatDuration } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { useAudioRecorder } from '@/hooks/useAudioRecorder';
+import { Waveform } from '@/components/voice/Waveform';
 
 interface VoiceRecorderProps {
   onRecorded: (audio: Blob) => void;
   disabled?: boolean;
-}
-
-/** Bar-graph waveform. Canvas, so a 60fps update does not thrash the DOM. */
-function Waveform({ data, active }: { data: number[]; active: boolean }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const context = canvas.getContext('2d');
-    if (!context) return;
-
-    const ratio = window.devicePixelRatio || 1;
-    const { width, height } = canvas.getBoundingClientRect();
-    canvas.width = width * ratio;
-    canvas.height = height * ratio;
-    context.setTransform(ratio, 0, 0, ratio, 0, 0);
-    context.clearRect(0, 0, width, height);
-
-    const bars = data.length;
-    const gap = 2;
-    const barWidth = Math.max(1.5, (width - gap * (bars - 1)) / bars);
-    const centre = height / 2;
-
-    // Solid ink at full opacity when live, muted when idle.
-    context.fillStyle = active ? '#111827' : '#D1D5DB';
-
-    data.forEach((amplitude, index) => {
-      const barHeight = Math.max(2, amplitude * (height - 4));
-      const x = index * (barWidth + gap);
-      const y = centre - barHeight / 2;
-      // Rounded caps read as a waveform rather than a bar chart.
-      const radius = Math.min(barWidth / 2, 1.5);
-      context.beginPath();
-      context.roundRect(x, y, barWidth, barHeight, radius);
-      context.fill();
-    });
-  }, [data, active]);
-
-  return <canvas ref={canvasRef} className="h-12 w-full" aria-hidden />;
 }
 
 export function VoiceRecorder({ onRecorded, disabled = false }: VoiceRecorderProps) {

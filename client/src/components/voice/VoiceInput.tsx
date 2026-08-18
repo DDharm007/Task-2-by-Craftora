@@ -4,12 +4,14 @@
  * Records audio using MediaRecorder and uploads to /api/transcribe which
  * calls ElevenLabs Scribe for high-accuracy speech-to-text.
  */
-import { useCallback, useEffect, useRef } from 'react';
-import { AlertCircle, Mic, Radio, Square, X } from 'lucide-react';
-import { cn, formatDuration, themeColor } from '@/lib/utils';
+import { useCallback, useEffect, useMemo } from 'react';
+import { AlertCircle, ArrowUp, Loader2, Podcast, Radio, X } from 'lucide-react';
+import { cn, formatDuration, themeColorHex } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import { SpecularButton } from '@/components/ui/SpecularButton';
 import { useAudioRecorder } from '@/hooks/useAudioRecorder';
 import { useTheme } from '@/hooks/useTheme';
+import { Waveform } from '@/components/voice/Waveform';
 
 interface VoiceInputProps {
   /** Called with the final text if live STT is used (deprecated). */
@@ -20,64 +22,27 @@ interface VoiceInputProps {
   autoResumeListen?: number;
 }
 
-// ── Waveform canvas ──────────────────────────────────────────────────────────
-
-function Waveform({
-  data,
-  active,
-  color,
-  inactiveColor,
-}: {
-  data: number[];
-  active: boolean;
-  color: string;
-  inactiveColor: string;
-}) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    const ratio = window.devicePixelRatio || 1;
-    const { width, height } = canvas.getBoundingClientRect();
-    canvas.width = width * ratio;
-    canvas.height = height * ratio;
-    ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
-    ctx.clearRect(0, 0, width, height);
-
-    const bars = data.length;
-    const gap = 2;
-    const barW = Math.max(1.5, (width - gap * (bars - 1)) / bars);
-    const cy = height / 2;
-
-    ctx.fillStyle = active ? color : inactiveColor;
-
-    data.forEach((amp, i) => {
-      const bh = Math.max(2, amp * (height - 4));
-      const x = i * (barW + gap);
-      const y = cy - bh / 2;
-      const r = Math.min(barW / 2, 1.5);
-      ctx.beginPath();
-      ctx.roundRect(x, y, barW, bh, r);
-      ctx.fill();
-    });
-  }, [data, active, color, inactiveColor]);
-
-  return <canvas ref={canvasRef} className="h-10 w-full" aria-hidden />;
-}
-
 // ── Main component ────────────────────────────────────────────────────────────
 
 export function VoiceInput({ onRecorded, disabled = false }: VoiceInputProps) {
   // ── Upload STT (MediaRecorder → ElevenLabs Scribe backend)
   const recorder = useAudioRecorder();
-  // Re-render on theme change so the canvas below re-reads the CSS variables
-  // it can't respond to on its own — `theme` itself is unused, subscribing is
-  // the point.
-  useTheme();
+  // The mic button's shader colours are read from CSS variables, which a GL
+  // uniform can't subscribe to on its own — recompute them whenever the
+  // theme changes so the highlight doesn't stay stuck in Light forever.
+  const { theme } = useTheme();
+  const shaderColors = useMemo(
+    () => ({
+      idleBase: themeColorHex('border-strong'),
+      idleLine: themeColorHex('ink'),
+      idleText: themeColorHex('ink'),
+      activeBase: themeColorHex('danger-border'),
+      activeLine: themeColorHex('danger'),
+      activeText: themeColorHex('danger'),
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [theme],
+  );
 
   // ── Handlers for upload mode
   const handleUploadToggle = useCallback(async () => {
@@ -115,7 +80,7 @@ export function VoiceInput({ onRecorded, disabled = false }: VoiceInputProps) {
 
   if (recorder.isSupported === false) {
     return (
-      <div className="flex items-start gap-2 rounded border border-warning-border bg-warning-subtle p-3 text-xs text-warning">
+      <div className="flex items-start gap-2 rounded-md border border-warning-border bg-warning-subtle p-3 text-xs text-warning">
         <AlertCircle className="mt-px size-4 shrink-0" />
         <span>
           Microphone access is not supported in this browser. Use Chrome, Edge, or Safari, or type
@@ -134,7 +99,7 @@ export function VoiceInput({ onRecorded, disabled = false }: VoiceInputProps) {
     <div className="space-y-3">
       {/* ── Mode indicator */}
       <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-1.5 rounded border border-border bg-subtle px-2.5 py-1 text-xs font-medium text-ink">
+        <div className="flex items-center gap-1.5 rounded-full bg-subtle px-2.5 py-1 text-xs font-medium text-ink">
           <Radio className="size-3 text-brand" />
           <span>Scribe</span>
         </div>
@@ -142,27 +107,54 @@ export function VoiceInput({ onRecorded, disabled = false }: VoiceInputProps) {
 
       {/* ── Controls row */}
       <div className="flex items-center gap-3">
-        {/* Mic button */}
-        <Button
-          variant={anyActive ? 'danger' : 'primary'}
-          size="icon"
-          onClick={handleUploadToggle}
-          disabled={disabled || isUploading || !recorder.isSupported}
-          loading={isUploading}
-          aria-label={anyActive ? 'Stop' : 'Start voice input'}
-          className="size-10 shrink-0 rounded-full"
-        >
-          {isUploading ? null : anyActive ? <Square className="fill-current" /> : <Mic />}
-        </Button>
+        {/* Idle: a circular mic button — transparent, so the specular ring is
+            the whole affordance rather than competing with a filled disc
+            behind it. Recording: a horizontal pill labelled "Send" rather
+            than a small stop-icon circle, because the click does two things
+            at once (stop the recording *and* hand it to the pipeline) and a
+            bare square icon undersold the second half of that. `SpecularButton`
+            clamps its corner radius to half the shorter side on its own, so a
+            short wide button becomes a stadium shape with no extra styling. */}
+        {anyActive ? (
+          <SpecularButton
+            onClick={handleUploadToggle}
+            disabled={disabled || isUploading}
+            aria-label="Stop recording and send"
+            className="h-10 shrink-0 gap-2 border border-danger-border px-4 text-sm font-medium text-danger"
+            baseColor={shaderColors.activeBase}
+            lineColor={shaderColors.activeLine}
+            textColor={shaderColors.activeText}
+            autoAnimate
+            shineSize={14}
+            shineFade={50}
+          >
+            <ArrowUp className="size-4" />
+            Send
+          </SpecularButton>
+        ) : (
+          <SpecularButton
+            onClick={handleUploadToggle}
+            disabled={disabled || isUploading || !recorder.isSupported}
+            loading={isUploading}
+            aria-label="Start voice input"
+            className="size-10 shrink-0 border border-border text-ink"
+            baseColor={shaderColors.idleBase}
+            lineColor={shaderColors.idleLine}
+            textColor={shaderColors.idleText}
+            shineSize={14}
+            shineFade={50}
+          >
+            {isUploading ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <Podcast className="size-4" />
+            )}
+          </SpecularButton>
+        )}
 
         {/* Waveform */}
         <div className="min-w-0 flex-1">
-          <Waveform
-            data={recorder.waveform}
-            active={isRecording}
-            color={themeColor('waveform')}
-            inactiveColor={themeColor('border-strong')}
-          />
+          <Waveform data={recorder.waveform} active={isRecording} />
         </div>
 
         {/* Timer / stop */}
@@ -192,7 +184,7 @@ export function VoiceInput({ onRecorded, disabled = false }: VoiceInputProps) {
       <p className="text-2xs text-ink-secondary">
         {isRecording ? (
           <>
-            Recording — <kbd className="font-mono">Space</kbd> to stop,{' '}
+            Recording — <kbd className="font-mono">Space</kbd> or Send to finish,{' '}
             <kbd className="font-mono">Esc</kbd> to discard.
           </>
         ) : (
@@ -205,7 +197,7 @@ export function VoiceInput({ onRecorded, disabled = false }: VoiceInputProps) {
 
       {/* ── Error */}
       {anyError ? (
-        <div className="flex items-start gap-2 rounded border border-danger-border bg-danger-subtle p-2.5 text-xs text-danger">
+        <div className="flex items-start gap-2 rounded-md border border-danger-border bg-danger-subtle p-2.5 text-xs text-danger">
           <AlertCircle className="mt-px size-3.5 shrink-0" />
           <span>{anyError}</span>
         </div>

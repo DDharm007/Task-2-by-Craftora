@@ -7,15 +7,17 @@ import { cn } from '@/lib/utils';
 // ─── Badge ───────────────────────────────────────────────────────────────────
 
 const badgeVariants = cva(
-  'inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-2xs font-medium [&_svg]:size-3',
+  // Pills, to match the buttons. `neutral` drops its border entirely — a
+  // borderless soft fill is how Indus draws a chip that isn't reporting state.
+  'inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-2xs font-medium [&_svg]:size-3',
   {
     variants: {
       tone: {
-        neutral: 'border-border bg-subtle text-ink-secondary',
+        neutral: 'border-transparent bg-subtle text-ink-secondary',
         success: 'border-success-border bg-success-subtle text-success',
         warning: 'border-warning-border bg-warning-subtle text-warning',
         danger: 'border-danger-border bg-danger-subtle text-danger',
-        solid: 'border-transparent bg-accent text-white',
+        solid: 'border-transparent bg-accent text-accent-ink',
       },
     },
     defaultVariants: { tone: 'neutral' },
@@ -56,7 +58,7 @@ export function Tooltip({
         <TooltipPrimitive.Content
           side={side}
           sideOffset={6}
-          className="z-50 max-w-xs animate-fade-in rounded border border-border bg-card px-2 py-1 text-xs text-ink shadow-popover"
+          className="z-50 max-w-xs animate-fade-in rounded-md border border-border bg-card px-2.5 py-1.5 text-xs text-ink shadow-popover"
         >
           {content}
         </TooltipPrimitive.Content>
@@ -94,7 +96,9 @@ export function Switch({
         disabled={disabled}
         className="relative mt-0.5 h-4 w-7 shrink-0 rounded-full border border-border bg-border transition-colors data-[state=checked]:border-accent data-[state=checked]:bg-accent"
       >
-        <SwitchPrimitive.Thumb className="block size-3 translate-x-0.5 rounded-full bg-white transition-transform data-[state=checked]:translate-x-3.5" />
+        {/* The thumb has to invert with the track: on Dark the checked track
+            is near-white, and a white thumb on it would vanish. */}
+        <SwitchPrimitive.Thumb className="block size-3 translate-x-0.5 rounded-full bg-card transition-transform data-[state=checked]:translate-x-3.5 data-[state=checked]:bg-accent-ink" />
       </SwitchPrimitive.Root>
     </label>
   );

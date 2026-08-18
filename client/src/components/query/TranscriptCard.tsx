@@ -34,7 +34,14 @@ export function TranscriptCard({ transcription }: { transcription: Transcription
         }
       />
       <CardContent className="space-y-3">
-        <p className="text-sm leading-relaxed text-ink">
+        <p
+          lang={
+            transcription.languageCode?.toLowerCase().startsWith('hin') || /[\u0900-\u097F]/.test(transcription.text)
+              ? 'hi'
+              : undefined
+          }
+          className="text-sm leading-relaxed text-ink"
+        >
           {transcription.text || <span className="text-ink-tertiary">No speech detected</span>}
         </p>
 

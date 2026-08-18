@@ -1,8 +1,8 @@
 /**
- * CLI: download and cache the MSMARCO-XI dataset.
+ * CLI: load the MSMARCO-XI dataset. Virtual mode keeps it in memory only.
  *
- *   npm run dataset:download            # use the cache if present
- *   npm run dataset:download -- --force # re-download
+ *   npm run dataset:download            # use the optional cache if enabled
+ *   npm run dataset:download -- --force # bypass the optional cache
  */
 import { config } from '../config/env.js';
 import { logger } from '../utils/logger.js';

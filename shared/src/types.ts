@@ -87,7 +87,7 @@ export interface RetrievedChunk {
   fusedScore: number;
   /** Cross-encoder relevance after reranking (0-1), null before rerank. */
   rerankScore: number | null;
-  /** Final score used for ordering and confidence. */
+  /** Final score used for result ordering; do not use it as a semantic similarity. */
   score: number;
   /** 1-based rank in the fused candidate list, before reranking. */
   rankBeforeRerank: number;
@@ -185,7 +185,11 @@ export interface LatencyBreakdown {
   denseRetrieval: number;
   sparseRetrieval: number;
   fusion: number;
+  /** MMR diversity selection over the fused candidates. */
+  diversity: number;
   reranking: number;
+  /** Fetching parent chunks for the surviving children. */
+  expansion: number;
   promptBuilding: number;
   generation: number;
   guardrailsPost: number;
@@ -358,6 +362,18 @@ export interface StageLatencyStats {
   reranking: LatencyPercentiles;
   generation: LatencyPercentiles;
   transcription: LatencyPercentiles;
+  /**
+   * Query text in → final ranked context out: embedding + dense ∥ sparse +
+   * fusion + MMR + rerank + parent expansion.
+   *
+   * This is the window the 50ms budget in the task spec applies to, and it is
+   * tracked separately from `total` because `total` includes the LLM, whose
+   * cost is a property of the model vendor rather than of this pipeline. No
+   * hosted LLM answers in 50ms — a round trip alone exceeds it — so a single
+   * blended number would make the budget unmeasurable in either direction.
+   */
+  retrievalPath: LatencyPercentiles;
+  /** Everything, generation included. Only meaningful when the LLM ran. */
   total: LatencyPercentiles;
 }
 
@@ -386,6 +402,13 @@ export interface RequestLogEntry {
   status: AnswerStatus;
   confidence: number;
   totalLatencyMs: number;
+  /**
+   * The 50ms-budget window for this request: query text in → ranked context
+   * out. Tracked per request as well as in aggregate so the analytics page can
+   * plot it over time — `totalLatencyMs` is dominated by the LLM and would
+   * flatten this to a baseline if they shared an axis.
+   */
+  retrievalPathMs: number;
   chunkCount: number;
   tokensUsed: number;
   voice: boolean;
@@ -406,6 +429,24 @@ export interface IndexStats {
   embeddingDimensions: number;
   lastIndexedAt: string | null;
   indexed: boolean;
+}
+
+/**
+ * A starter question drawn from the indexed dataset itself, rather than a
+ * hardcoded example query — so the chips shown on Console reflect what the
+ * corpus actually contains and rotate on every load instead of asking the
+ * same three questions forever.
+ */
+export interface QuerySuggestion {
+  text: string;
+  /** Dataset language tag, e.g. `hin_Deva` or `eng_Latn`. */
+  language: string;
+  /** Display note under the chip, e.g. "Hindi" or "Hindi — same question". */
+  note: string;
+}
+
+export interface DatasetSuggestionsResponse {
+  suggestions: QuerySuggestion[];
 }
 
 export interface StatsResponse {

@@ -17,6 +17,7 @@
 import type {
   BenchmarkCase,
   BenchmarkResult,
+  ChunkMetadata,
   RetrievalQualityMetrics,
   StageLatencyStats,
   TokenUsage,
@@ -25,13 +26,21 @@ import { config } from '../config/env.js';
 import { logger } from '../utils/logger.js';
 import { StageTimer, mapWithConcurrency, now } from '../utils/async.js';
 import { retrieve } from '../rag/retriever/index.js';
-import { percentiles } from './analytics.service.js';
-import { loadDataset, toEvaluationCases, type EvaluationCase } from './dataset.service.js';
+import { retrievalCache } from '../rag/retriever/cache.js';
+import { percentiles, retrievalPathMs } from './analytics.service.js';
+import {
+  downloadDataset,
+  evaluationCasesFromIndex,
+  loadDataset,
+  toEvaluationCases,
+  type EvaluationCase,
+} from './dataset.service.js';
 import { runQuery } from './rag.service.js';
 import { getIndexStats } from './indexing.service.js';
 import { getEmbeddingProvider } from '../rag/embeddings/index.js';
 import { getReranker } from '../rag/reranker/index.js';
 import { getVectorStore } from '../rag/vector/index.js';
+import { warmPipeline } from './warmup.service.js';
 import { errors } from '../utils/errors.js';
 
 export interface BenchmarkOptions {
@@ -48,6 +57,8 @@ interface CaseOutcome {
     retrieval: number;
     reranking: number;
     generation: number;
+    /** The 50ms-budget window: query text in → ranked context out. */
+    retrievalPath: number;
     total: number;
   };
   /** Final reranked document ids, best first — used for the @5 metrics. */
@@ -61,6 +72,40 @@ interface CaseOutcome {
   relevant: Set<string>;
   usage: TokenUsage;
   confidence: number;
+}
+
+/**
+ * Labelled cases, preferring the index over the network.
+ *
+ * The index's chunk metadata carries the same ground-truth link the dataset
+ * does (`queryId` + `isSelected`), so the eval set can be rebuilt from it
+ * exactly — and that is the better source: it scores against precisely what
+ * was indexed, needs no network inside a latency benchmark, and cannot
+ * silently change its denominator when a HuggingFace stream drops a language
+ * mid-download. The dataset is the fallback for an index built before this
+ * metadata existed.
+ */
+async function loadEvaluationCases(): Promise<EvaluationCase[]> {
+  const store = await getVectorStore();
+  const metadata: Array<{ metadata: ChunkMetadata }> = [];
+  for await (const batch of store.scrollAll(1_000)) {
+    for (const hit of batch) metadata.push({ metadata: hit.metadata });
+  }
+
+  const fromIndex = evaluationCasesFromIndex(metadata);
+  if (fromIndex.length > 0) {
+    logger.info({ cases: fromIndex.length }, 'Evaluation cases derived from the index');
+    return fromIndex;
+  }
+
+  logger.warn('Index carries no query labels — falling back to the dataset');
+  const bundle = await loadDataset().catch(async () => {
+    if (!config.dataset.persistBundle) return downloadDataset();
+    throw errors.validation(
+      'No dataset found. Run `npm run dataset:download` before benchmarking.',
+    );
+  });
+  return toEvaluationCases(bundle);
 }
 
 /**
@@ -82,13 +127,7 @@ export async function runBenchmark(options: BenchmarkOptions): Promise<Benchmark
   const stats = await getIndexStats();
   if (!stats.indexed) throw errors.indexEmpty();
 
-  const bundle = await loadDataset().catch(() => {
-    throw errors.validation(
-      'No dataset found. Run `npm run dataset:download` before benchmarking.',
-    );
-  });
-
-  let cases = toEvaluationCases(bundle);
+  let cases = await loadEvaluationCases();
   if (options.language) {
     cases = cases.filter((item) => item.language === options.language);
   }
@@ -106,55 +145,71 @@ export async function runBenchmark(options: BenchmarkOptions): Promise<Benchmark
     'Running benchmark',
   );
 
-  // Warm the models before timing anything. The server does this at boot
-  // (see index.ts), so a lazy load inside the measured window is an artefact of
-  // the harness, not latency a user would ever see: it put a ~2.2s model load
-  // on whichever queries happened to run first and dragged every percentile
-  // above p50 up with it.
-  const warmStarted = now();
-  await Promise.all([getEmbeddingProvider().warmup(), getReranker().warmup()]);
-  logger.info({ ms: Math.round(now() - warmStarted) }, 'Models warm — starting timed run');
+  // Warm before timing anything, using the *same* helper the server runs at
+  // boot — so these percentiles describe a server warmed exactly like a real
+  // one, and the benchmark cannot flatter itself by warming more.
+  //
+  // A lazy load inside the measured window is an artefact of the harness, not
+  // latency any user would see: it lands entirely on whichever query happens
+  // to run first. Measured here, skipping this put a 2.2s model load and a
+  // 730ms store load on query one and took p100 from 30ms to 887ms.
+  const warm = await warmPipeline();
+  logger.info({ ms: warm.ms }, 'Pipeline warm — starting timed run');
 
-  const outcomes = await mapWithConcurrency(selected, options.concurrency, async (item) =>
-    runCase(item, options.generation),
-  );
+  // Clear the retrieval cache and keep it out of the timed run.
+  //
+  // The evaluation queries are all distinct, so it would essentially never hit
+  // anyway — but "essentially never" is not a property worth trusting a
+  // published latency number to, and a warm cache would make these percentiles
+  // measure map lookups instead of retrieval. The warm-up probe above also
+  // leaves an entry behind, which this removes.
+  retrievalCache.clear();
+  retrievalCache.setEnabled(false);
+  try {
+    const outcomes = await mapWithConcurrency(selected, options.concurrency, async (item) =>
+      runCase(item, options.generation),
+    );
 
-  const finished = now();
+    const finished = now();
 
-  return {
-    startedAt,
-    finishedAt: new Date().toISOString(),
-    durationMs: Math.round(finished - started),
-    sampleSize: outcomes.length,
-    generationEnabled: options.generation,
-    latency: aggregateLatency(outcomes),
-    quality: computeQuality(outcomes),
-    averageConfidence:
-      outcomes.length > 0
-        ? Number(
-            (outcomes.reduce((sum, o) => sum + o.confidence, 0) / outcomes.length).toFixed(4),
-          )
-        : 0,
-    tokensUsed: outcomes.reduce<TokenUsage>(
-      (sum, o) => ({
-        promptTokens: sum.promptTokens + o.usage.promptTokens,
-        completionTokens: sum.completionTokens + o.usage.completionTokens,
-        reasoningTokens: sum.reasoningTokens + o.usage.reasoningTokens,
-        totalTokens: sum.totalTokens + o.usage.totalTokens,
-      }),
-      { promptTokens: 0, completionTokens: 0, reasoningTokens: 0, totalTokens: 0 },
-    ),
-    cases: outcomes.map((o) => o.benchmarkCase),
-    config: {
-      embeddingProvider: getEmbeddingProvider().name,
-      embeddingModel: getEmbeddingProvider().model,
-      vectorStore: (await getVectorStore()).name,
-      rerankerProvider: getReranker().name,
-      llmModel: config.llm.model,
-      topK: config.retrieval.topK,
-      rerankTopN: config.retrieval.rerankTopN,
-    },
-  };
+    return {
+      startedAt,
+      finishedAt: new Date().toISOString(),
+      durationMs: Math.round(finished - started),
+      sampleSize: outcomes.length,
+      generationEnabled: options.generation,
+      latency: aggregateLatency(outcomes),
+      quality: computeQuality(outcomes),
+      averageConfidence:
+        outcomes.length > 0
+          ? Number(
+              (outcomes.reduce((sum, o) => sum + o.confidence, 0) / outcomes.length).toFixed(4),
+            )
+          : 0,
+      tokensUsed: outcomes.reduce<TokenUsage>(
+        (sum, o) => ({
+          promptTokens: sum.promptTokens + o.usage.promptTokens,
+          completionTokens: sum.completionTokens + o.usage.completionTokens,
+          reasoningTokens: sum.reasoningTokens + o.usage.reasoningTokens,
+          totalTokens: sum.totalTokens + o.usage.totalTokens,
+        }),
+        { promptTokens: 0, completionTokens: 0, reasoningTokens: 0, totalTokens: 0 },
+      ),
+      cases: outcomes.map((o) => o.benchmarkCase),
+      config: {
+        embeddingProvider: getEmbeddingProvider().name,
+        embeddingModel: getEmbeddingProvider().model,
+        vectorStore: (await getVectorStore()).name,
+        rerankerProvider: getReranker().name,
+        llmModel: config.llm.model,
+        topK: config.retrieval.topK,
+        rerankTopN: config.retrieval.rerankTopN,
+      },
+    };
+  } finally {
+    retrievalCache.setEnabled(null);
+    retrievalCache.clear();
+  }
 }
 
 async function runCase(item: EvaluationCase, withGeneration: boolean): Promise<CaseOutcome> {
@@ -189,6 +244,7 @@ async function runCase(item: EvaluationCase, withGeneration: boolean): Promise<C
           Math.max(result.latency.denseRetrieval, result.latency.sparseRetrieval) + result.latency.fusion,
         reranking: result.latency.reranking,
         generation: result.latency.generation,
+        retrievalPath: retrievalPathMs(result.latency),
         total: result.latency.total,
       },
       ranked,
@@ -209,7 +265,10 @@ async function runCase(item: EvaluationCase, withGeneration: boolean): Promise<C
     retrieval.candidates.map((chunk) => chunk.metadata.documentId),
   );
   const hit = ranked.some((id) => relevant.has(id));
-  const topScore = retrieval.chunks[0]?.score ?? 0;
+  // RRF is a rank-only score and should never be reported as semantic
+  // confidence. The highest dense cosine score is stable whether reranking is
+  // enabled or not.
+  const topScore = Math.max(0, ...retrieval.chunks.map((chunk) => chunk.denseScore ?? 0));
 
   return {
     benchmarkCase: {
@@ -228,6 +287,11 @@ async function runCase(item: EvaluationCase, withGeneration: boolean): Promise<C
       retrieval: Math.max(retrieval.timings.dense, retrieval.timings.sparse) + retrieval.timings.fusion,
       reranking: retrieval.timings.rerank,
       generation: 0,
+      // Retrieval-only mode runs nothing outside the budget window, so the
+      // measured wall clock *is* the retrieval path — and using it rather than
+      // a sum of stages means anything unaccounted for (MMR, parent
+      // expansion, allocation) is still charged to the budget.
+      retrievalPath: totalMs,
       total: totalMs,
     },
     ranked,
@@ -331,6 +395,7 @@ function aggregateLatency(outcomes: readonly CaseOutcome[]): StageLatencyStats {
     reranking: percentiles(outcomes.map((o) => o.latencies.reranking)),
     generation: percentiles(outcomes.map((o) => o.latencies.generation).filter((v) => v > 0)),
     transcription: percentiles([]),
+    retrievalPath: percentiles(outcomes.map((o) => o.latencies.retrievalPath)),
     total: percentiles(outcomes.map((o) => o.latencies.total)),
   };
 }

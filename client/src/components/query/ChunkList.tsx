@@ -63,7 +63,9 @@ function ChunkRow({ chunk, index }: { chunk: RetrievedChunk; index: number }) {
   const inspected = useSession((state) => state.inspectedChunkId);
   const inspectChunk = useSession((state) => state.inspectChunk);
   const isOpen = inspected === chunk.id;
-  const tone = scoreTone(chunk.score);
+  const rankingScore = chunk.rerankScore ?? chunk.fusedScore;
+  const rankingLabel = chunk.rerankScore === null ? 'Rank' : 'Relevance';
+  const tone = scoreTone(rankingScore);
 
   return (
     <li
@@ -102,17 +104,25 @@ function ChunkRow({ chunk, index }: { chunk: RetrievedChunk; index: number }) {
               ) : null}
               <span className="ml-auto flex items-center gap-2">
                 <RankDelta chunk={chunk} />
-                <span
-                  className={cn(
-                    'font-mono text-xs font-medium',
-                    // Explicit classes — Tailwind cannot see interpolated names.
-                    tone === 'success' && 'text-success',
-                    tone === 'warning' && 'text-warning',
-                    tone === 'danger' && 'text-danger',
-                  )}
+                <Tooltip
+                  content={
+                    chunk.rerankScore === null
+                      ? 'Rank-fusion score used for ordering. Open this chunk to inspect its dense semantic similarity.'
+                      : 'Reranker relevance used for ordering. Open this chunk to inspect its dense semantic similarity.'
+                  }
                 >
-                  {formatPercent(chunk.score, 1)}
-                </span>
+                  <span
+                    className={cn(
+                      'font-mono text-xs font-medium',
+                      // Explicit classes — Tailwind cannot see interpolated names.
+                      tone === 'success' && 'text-success',
+                      tone === 'warning' && 'text-warning',
+                      tone === 'danger' && 'text-danger',
+                    )}
+                  >
+                    {rankingLabel} {formatPercent(rankingScore, 1)}
+                  </span>
+                </Tooltip>
               </span>
             </div>
 
@@ -122,7 +132,7 @@ function ChunkRow({ chunk, index }: { chunk: RetrievedChunk; index: number }) {
 
             {/* The score text above is already tinted by verdict, so the bar
                 carries magnitude — letting two chunks be ranked by eye. */}
-            <Meter value={chunk.score} className="mt-2" />
+            <Meter value={rankingScore} className="mt-2" />
           </div>
         </div>
       </button>

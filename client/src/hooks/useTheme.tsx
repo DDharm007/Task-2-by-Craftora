@@ -23,7 +23,7 @@ const THEMES: readonly Theme[] = ['light', 'dark', 'exclusive'];
 const THEME_COLOR: Record<Theme, string> = {
   light: '#FFFFFF',
   dark: '#0B0D10',
-  exclusive: '#036735',
+  exclusive: '#036834',
 };
 
 function isTheme(value: string | null): value is Theme {
@@ -49,21 +49,21 @@ const ThemeContext = createContext<ThemeContextValue | null>(null);
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<Theme>(initialTheme);
 
-  useEffect(() => {
-    // Light has no attribute at all — it's the bare `:root` in the
-    // stylesheet, so removing the attribute (rather than writing
-    // `data-theme="light"`) keeps that the true zero-config default.
-    if (theme === 'light') {
+  const setTheme = useCallback((next: Theme) => {
+    // Update the DOM synchronously *before* React re-renders.
+    // If we wait for a useEffect, components that read CSS variables during render
+    // (like VoiceInput) or in their own effects (like Waveform) will read the old colors.
+    if (next === 'light') {
       document.documentElement.removeAttribute('data-theme');
     } else {
-      document.documentElement.setAttribute('data-theme', theme);
+      document.documentElement.setAttribute('data-theme', next);
     }
-    window.localStorage.setItem(THEME_STORAGE_KEY, theme);
+    window.localStorage.setItem(THEME_STORAGE_KEY, next);
 
-    document.querySelector('#theme-color-meta')?.setAttribute('content', THEME_COLOR[theme]);
-  }, [theme]);
+    document.querySelector('#theme-color-meta')?.setAttribute('content', THEME_COLOR[next]);
 
-  const setTheme = useCallback((next: Theme) => setThemeState(next), []);
+    setThemeState(next);
+  }, []);
 
   return <ThemeContext.Provider value={{ theme, setTheme }}>{children}</ThemeContext.Provider>;
 }

@@ -8,10 +8,9 @@
 import { createApp } from './app.js';
 import { config, redactedConfig } from './config/env.js';
 import { logger } from './utils/logger.js';
-import { getEmbeddingProvider } from './rag/embeddings/index.js';
-import { getReranker } from './rag/reranker/index.js';
 import { closeVectorStore, getVectorStore } from './rag/vector/index.js';
 import { getIndexStats } from './services/indexing.service.js';
+import { warmPipeline } from './services/warmup.service.js';
 
 const app = createApp();
 
@@ -52,13 +51,11 @@ async function warmup(): Promise<void> {
       );
     }
 
-    // Loading ONNX weights takes seconds; do it now so the first user query
-    // does not pay for it.
-    await getEmbeddingProvider().warmup();
-    logger.info('Embedding model warm');
-
-    await getReranker().warmup();
-    logger.info('Reranker warm');
+    // ONNX weights, the BM25 inverted index and the store's vector matrix all
+    // load lazily and together cost seconds; do it now so the first user query
+    // does not pay for it. Same helper the benchmark uses, so its percentiles
+    // describe a server warmed exactly like this one.
+    await warmPipeline();
   } catch (error) {
     logger.error({ error: (error as Error).message }, 'Warmup failed — the API is up but degraded');
   }

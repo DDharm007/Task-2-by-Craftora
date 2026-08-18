@@ -7,19 +7,24 @@
 import { useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import {
-  Bar,
-  BarChart,
+  Area,
+  AreaChart,
   CartesianGrid,
-  Cell,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip as ChartTooltip,
   XAxis,
   YAxis,
 } from 'recharts';
 import { Activity, Play, Target, Timer, Coins, Gauge } from 'lucide-react';
-import type { BenchmarkResult, LatencyPercentiles, StageLatencyStats } from '@goarag/shared';
+import type {
+  BenchmarkResult,
+  LatencyPercentiles,
+  RequestLogEntry,
+  StageLatencyStats,
+} from '@goarag/shared';
 import { fetchStats, runBenchmark } from '@/lib/api';
-import { formatMs, formatNumber, formatPercent, themeColor } from '@/lib/utils';
+import { cn, formatMs, formatNumber, formatPercent, themeColor } from '@/lib/utils';
 import { useTheme } from '@/hooks/useTheme';
 import { Card, CardHeader, CardContent, StatCard } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -32,18 +37,84 @@ const STAGE_ROWS: Array<{ key: keyof StageLatencyStats; label: string }> = [
   { key: 'embedding', label: 'Embedding' },
   { key: 'retrieval', label: 'Retrieval' },
   { key: 'reranking', label: 'Reranking' },
+  // The 50ms-budget window, sitting between the stages it sums and the
+  // generation that is deliberately outside it.
+  { key: 'retrievalPath', label: 'Retrieval path' },
   { key: 'generation', label: 'Generation' },
-  { key: 'total', label: 'Total' },
+  { key: 'total', label: 'Total (+LLM)' },
 ];
 
-/** Percentile bars for one stage. */
-function PercentileChart({ stats }: { stats: LatencyPercentiles }) {
-  const data = PERCENTILE_KEYS.map((key) => ({ name: key.toUpperCase(), value: stats[key] }));
+/** The task spec's budget for query text in → ranked context out. */
+const LATENCY_BUDGET_MS = 50;
 
-  if (stats.count === 0) {
+/** One point on the trace, as handed to the chart. */
+interface TracePoint {
+  index: number;
+  value: number;
+  total: number;
+  at: string;
+}
+
+/** Tooltip for the trace. Styled with app tokens rather than inline colours. */
+function TraceTooltip({
+  active,
+  payload,
+}: {
+  active?: boolean;
+  payload?: Array<{ payload: TracePoint }>;
+}) {
+  const point = payload?.[0]?.payload;
+  if (!active || !point) return null;
+  const over = point.value > LATENCY_BUDGET_MS;
+
+  return (
+    <div className="rounded-md border border-border bg-card px-2.5 py-2 shadow-popover">
+      <p className="mb-1 text-2xs text-ink-tertiary">{point.at}</p>
+      <p className="flex items-baseline gap-1.5">
+        <span
+          className={cn('font-mono text-sm font-medium tabular-nums', over ? 'text-danger' : 'text-ink')}
+        >
+          {formatMs(point.value)}
+        </span>
+        <span className="text-2xs text-ink-secondary">retrieval path</span>
+      </p>
+      <p className="mt-0.5 font-mono text-2xs text-ink-tertiary tabular-nums">
+        {formatMs(point.total)} end to end
+      </p>
+    </div>
+  );
+}
+
+/**
+ * Retrieval-path latency over recent requests, drawn as a trace rather than as
+ * percentile bars.
+ *
+ * The bar chart this replaced plotted P50/P70/P95/P99/P100 side by side, which
+ * is only meaningful once there are enough samples for those to differ — on a
+ * fresh server it drew five identical bars from one observation and implied a
+ * distribution that did not exist. A time series says something true at every
+ * sample count: with one request it is one point, and it gets more informative
+ * as requests accumulate rather than less honest.
+ *
+ * It plots the *retrieval path*, not total latency, because that is the number
+ * under a budget. Total is dominated by the LLM — a 1.4s generation against a
+ * ~20ms retrieval path would flatten the series it is supposed to show.
+ */
+function LatencyTrace({ entries }: { entries: RequestLogEntry[] }) {
+  // Oldest first: the analytics store hands back newest-first for the table.
+  const data = [...entries]
+    .reverse()
+    .map((entry, index) => ({
+      index,
+      value: entry.retrievalPathMs,
+      total: entry.totalLatencyMs,
+      at: new Date(entry.createdAt).toLocaleTimeString(),
+    }));
+
+  if (data.length === 0) {
     return (
-      <div className="flex h-40 items-center justify-center text-xs text-ink-tertiary">
-        No samples yet
+      <div className="flex h-44 items-center justify-center text-xs text-ink-tertiary">
+        No requests yet — run a query on the Console.
       </div>
     );
   }
@@ -54,42 +125,161 @@ function PercentileChart({ stats }: { stats: LatencyPercentiles }) {
   // `useTheme()` precisely so a theme switch forces that render.
   const gridColor = themeColor('border');
   const tickColor = themeColor('ink-secondary');
-  const cardColor = themeColor('card');
   const inkColor = themeColor('ink');
-  const tailColor = themeColor('warning');
+  const budgetColor = themeColor('danger');
+
+  const peak = Math.max(...data.map((point) => point.value), LATENCY_BUDGET_MS);
 
   return (
     <ResponsiveContainer width="100%" height={180}>
-      <BarChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: -12 }}>
+      {/* No negative left margin: it was pulling the plot area past the
+          YAxis's own reserved width, clipping the leading digit off every
+          tick label ("50ms" rendering as ")0ms"). `width` on YAxis already
+          controls how much gutter the labels get. */}
+      <AreaChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
+        <defs>
+          {/* The gradient is what makes this read as a trace rather than a
+              plotted line — opaque at the baseline, gone by the top. */}
+          <linearGradient id="latency-fill" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={inkColor} stopOpacity={0.22} />
+            <stop offset="100%" stopColor={inkColor} stopOpacity={0} />
+          </linearGradient>
+        </defs>
         <CartesianGrid strokeDasharray="2 4" stroke={gridColor} vertical={false} />
-        <XAxis dataKey="name" tick={{ fontSize: 11, fill: tickColor }} axisLine={false} tickLine={false} />
+        <XAxis dataKey="index" tick={false} axisLine={false} tickLine={false} height={4} />
         <YAxis
           tick={{ fontSize: 11, fill: tickColor }}
           axisLine={false}
           tickLine={false}
-          tickFormatter={(value: number) => (value >= 1000 ? `${(value / 1000).toFixed(1)}s` : `${value}`)}
+          width={46}
+          domain={[0, Math.ceil((peak * 1.15) / 10) * 10]}
+          tickFormatter={(value: number) => (value >= 1000 ? `${(value / 1000).toFixed(1)}s` : `${value}ms`)}
         />
-        <ChartTooltip
-          cursor={{ fill: gridColor }}
-          contentStyle={{
-            background: cardColor,
-            border: `1px solid ${gridColor}`,
-            borderRadius: 6,
-            fontSize: 12,
-            color: inkColor,
-            boxShadow: '0 8px 24px -4px rgb(0 0 0 / 0.24)',
+        {/* The line the whole pipeline is judged against, so it belongs on the
+            chart rather than in prose beside it. */}
+        <ReferenceLine
+          y={LATENCY_BUDGET_MS}
+          stroke={budgetColor}
+          strokeDasharray="4 4"
+          strokeWidth={1}
+          label={{
+            value: `${LATENCY_BUDGET_MS}ms budget`,
+            position: 'insideTopRight',
+            fill: budgetColor,
+            fontSize: 10,
           }}
-          labelStyle={{ color: inkColor }}
-          formatter={(value: number) => [formatMs(value), 'Latency']}
         />
-        <Bar dataKey="value" radius={[2, 2, 0, 0]} maxBarSize={48}>
-          {data.map((entry) => (
-            // The tail is what matters — shade p95+ to make it stand out.
-            <Cell key={entry.name} fill={entry.name === 'P99' || entry.name === 'P100' ? tailColor : inkColor} />
-          ))}
-        </Bar>
-      </BarChart>
+        {/* A component rather than recharts' `contentStyle` props: it inherits
+            the app's card tokens directly, so it themes with everything else
+            instead of needing its colours passed in one at a time. */}
+        <ChartTooltip
+          cursor={{ stroke: tickColor, strokeWidth: 1, strokeDasharray: '3 3' }}
+          content={<TraceTooltip />}
+        />
+        <Area
+          type="monotone"
+          dataKey="value"
+          stroke={inkColor}
+          strokeWidth={1.6}
+          fill="url(#latency-fill)"
+          // Dots only once the series is sparse enough for them to read as
+          // data points rather than as noise along the line.
+          dot={data.length <= 20 ? { r: 2, fill: inkColor, strokeWidth: 0 } : false}
+          activeDot={{ r: 3.5, fill: inkColor, strokeWidth: 0 }}
+          isAnimationActive={false}
+        />
+      </AreaChart>
     </ResponsiveContainer>
+  );
+}
+
+/**
+ * Percentiles as horizontal bars against the budget.
+ *
+ * Used for benchmark results, where there genuinely is a distribution — a
+ * 155-query run has a real tail worth seeing. Horizontal rather than vertical
+ * because the labels (P50…P100) and the values both read inline, and because
+ * the budget becomes a single vertical rule every bar is measured against
+ * instead of a number you have to hold in your head.
+ */
+function PercentileStrip({ stats }: { stats: LatencyPercentiles }) {
+  if (stats.count === 0) {
+    return <div className="py-6 text-center text-xs text-ink-tertiary">No samples</div>;
+  }
+
+  // Scale to the budget *or* the worst value, whichever is larger, so a run
+  // that blows the budget still shows how far past it went.
+  const scale = Math.max(stats.p100, LATENCY_BUDGET_MS) * 1.05;
+  const budgetLeft = (LATENCY_BUDGET_MS / scale) * 100;
+
+  return (
+    <div className="space-y-2">
+      <div className="relative">
+        <span
+          className="absolute -top-1 bottom-0 z-10 w-px bg-danger/70"
+          style={{ left: `${budgetLeft}%` }}
+          aria-hidden
+        />
+        <div className="space-y-2">
+          {PERCENTILE_KEYS.map((key) => {
+            const value = stats[key];
+            const over = value > LATENCY_BUDGET_MS;
+            return (
+              <div key={key} className="flex items-center gap-2">
+                <span className="w-9 shrink-0 font-mono text-2xs text-ink-secondary">
+                  {key.toUpperCase()}
+                </span>
+                <div className="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-border/40">
+                  <div
+                    className={cn('h-full rounded-full', over ? 'bg-danger/70' : 'bg-ink/75')}
+                    style={{ width: `${Math.min(100, (value / scale) * 100)}%` }}
+                  />
+                </div>
+                <span
+                  className={cn(
+                    'w-14 shrink-0 text-right font-mono text-2xs tabular-nums',
+                    over ? 'text-danger' : 'text-ink',
+                  )}
+                >
+                  {formatMs(value)}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      <p className="text-2xs text-ink-tertiary">
+        {stats.count} queries · red rule marks the {LATENCY_BUDGET_MS}ms budget
+      </p>
+    </div>
+  );
+}
+
+/** Ticker-style readout: latest value and how it sits against the median. */
+function TraceTicker({ entries }: { entries: RequestLogEntry[] }) {
+  if (entries.length === 0) return null;
+  const values = entries.map((entry) => entry.retrievalPathMs);
+  const latest = values[0] as number;
+  const sorted = [...values].sort((a, b) => a - b);
+  const median = sorted[Math.floor(sorted.length / 2)] as number;
+  const delta = latest - median;
+  // Below the median is the good direction here, unlike a share price.
+  const better = delta <= 0;
+
+  return (
+    <div className="flex items-baseline gap-2">
+      <span className="font-mono text-lg font-semibold tabular-nums">{formatMs(latest)}</span>
+      {entries.length > 1 ? (
+        <span
+          className={cn(
+            'font-mono text-2xs tabular-nums',
+            better ? 'text-success' : 'text-warning',
+          )}
+        >
+          {better ? '▼' : '▲'} {formatMs(Math.abs(delta))} vs median
+        </span>
+      ) : null}
+    </div>
   );
 }
 
@@ -133,7 +323,7 @@ function QualityCard({ result }: { result: BenchmarkResult }) {
 export function AnalyticsPage() {
   const [sampleSize, setSampleSize] = useState(10);
   const [withGeneration, setWithGeneration] = useState(false);
-  // Forces a re-render on theme change — see the comment in PercentileChart.
+  // Forces a re-render on theme change — see the comment in LatencyTrace.
   useTheme();
 
   const { data: stats, isLoading } = useQuery({
@@ -148,6 +338,7 @@ export function AnalyticsPage() {
   });
 
   const analytics = stats?.analytics;
+  const sampleCount = analytics?.latency.retrievalPath.count ?? 0;
 
   return (
     <div className="mx-auto w-full max-w-[1400px] space-y-6 p-4 lg:p-6">
@@ -178,11 +369,23 @@ export function AnalyticsPage() {
                 hint={`${analytics?.successfulRequests ?? 0} answered · ${analytics?.blockedRequests ?? 0} blocked`}
                 icon={Activity}
               />
+              {/* Reports the budget window rather than total latency, and at
+                  p100 rather than the mean — "under 50ms" is only a claim
+                  worth making if the slowest query also clears it. */}
               <StatCard
-                label="Avg latency"
-                value={formatMs(analytics?.averageLatencyMs ?? 0)}
-                hint={`p95 ${formatMs(analytics?.latency.total.p95 ?? 0)}`}
+                label="Retrieval path p100"
+                value={formatMs(analytics?.latency.retrievalPath.p100 ?? 0)}
+                hint={`p50 ${formatMs(analytics?.latency.retrievalPath.p50 ?? 0)} · p70 ${formatMs(
+                  analytics?.latency.retrievalPath.p70 ?? 0,
+                )} · budget ${LATENCY_BUDGET_MS}ms`}
                 icon={Timer}
+                tone={
+                  (analytics?.latency.retrievalPath.count ?? 0) === 0
+                    ? 'neutral'
+                    : (analytics?.latency.retrievalPath.p100 ?? 0) <= LATENCY_BUDGET_MS
+                      ? 'success'
+                      : 'danger'
+                }
               />
               <StatCard
                 label="Avg confidence"
@@ -205,21 +408,32 @@ export function AnalyticsPage() {
       <section className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader
-            title="Total latency distribution"
+            title="Retrieval path"
             icon={Timer}
-            description={`${analytics?.latency.total.count ?? 0} samples · P99 and P100 highlighted`}
+            description={
+              sampleCount === 0
+                ? 'Query text in → ranked context out'
+                : `Last ${sampleCount} ${sampleCount === 1 ? 'request' : 'requests'} · budget ${LATENCY_BUDGET_MS}ms`
+            }
+            action={analytics ? <TraceTicker entries={analytics.recent} /> : null}
           />
           <CardContent>
-            {analytics ? (
-              <PercentileChart stats={analytics.latency.total} />
-            ) : (
-              <Skeleton className="h-40" />
-            )}
+            {analytics ? <LatencyTrace entries={analytics.recent} /> : <Skeleton className="h-44" />}
           </CardContent>
         </Card>
 
         <Card>
-          <CardHeader title="Per-stage percentiles" description="All values in milliseconds" />
+          <CardHeader
+            title="Per-stage percentiles"
+            description={
+              // With one observation every percentile *is* that observation, so
+              // a row of six identical numbers is noise dressed as a
+              // distribution. Say so rather than letting it be misread.
+              sampleCount === 1
+                ? 'One request — every percentile is that same observation'
+                : 'All values in milliseconds'
+            }
+          />
           <CardContent className="p-0">
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
@@ -327,10 +541,23 @@ export function AnalyticsPage() {
                 <CardHeader
                   title="Benchmark latency"
                   icon={Timer}
-                  description="Percentiles across the sampled queries"
+                  description="Retrieval path across the sampled queries"
+                  action={
+                    <Badge
+                      tone={
+                        benchmark.data.latency.retrievalPath.p100 <= LATENCY_BUDGET_MS
+                          ? 'success'
+                          : 'warning'
+                      }
+                    >
+                      {benchmark.data.latency.retrievalPath.p100 <= LATENCY_BUDGET_MS
+                        ? 'Within budget'
+                        : 'Over at p100'}
+                    </Badge>
+                  }
                 />
                 <CardContent>
-                  <PercentileChart stats={benchmark.data.latency.total} />
+                  <PercentileStrip stats={benchmark.data.latency.retrievalPath} />
                 </CardContent>
               </Card>
               <Card className="sm:col-span-2">

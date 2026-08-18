@@ -6,11 +6,17 @@
  * it did without going looking.
  */
 import { Activity, Check, Gauge, ShieldCheck, TriangleAlert, X, Timer } from 'lucide-react';
-import type { ConfidenceBreakdown, GuardrailReport, GuardrailResult, LatencyBreakdown } from '@goarag/shared';
-import { GUARDRAIL_LABELS } from '@goarag/shared';
+import type {
+  ConfidenceBreakdown,
+  ConfidenceFactorKey,
+  GuardrailReport,
+  GuardrailResult,
+  LatencyBreakdown,
+} from '@goarag/shared';
+import { CONFIDENCE_WEIGHTS, GUARDRAIL_LABELS } from '@goarag/shared';
 import { cn, formatMs, formatPercent } from '@/lib/utils';
 import { Card, CardHeader, CardContent } from '@/components/ui/card';
-import { Badge, KeyValue, Meter, Tooltip } from '@/components/ui/primitives';
+import { Badge, KeyValue, Tooltip } from '@/components/ui/primitives';
 
 // ─── Guardrails ──────────────────────────────────────────────────────────────
 
@@ -77,7 +83,7 @@ export function GuardrailPanel({ report }: { report: GuardrailReport | null }) {
                             {GUARDRAIL_LABELS[result.id] ?? result.id}
                           </span>
                           <span className="font-mono text-2xs text-ink-tertiary">
-                            {result.score.toFixed(2)}
+                            {result.score.toFixed(4)}
                           </span>
                         </div>
                       </Tooltip>
@@ -95,45 +101,57 @@ export function GuardrailPanel({ report }: { report: GuardrailReport | null }) {
 
 // ─── Confidence ──────────────────────────────────────────────────────────────
 
-const CONFIDENCE_FACTORS: Array<{
-  key: keyof ConfidenceBreakdown;
-  label: string;
-  weight: string;
-  hint: string;
-}> = [
-  {
-    key: 'topScore',
-    label: 'Top chunk',
-    weight: '35%',
-    hint: 'Cross-encoder score of the single best chunk',
-  },
-  {
-    key: 'groundedness',
-    label: 'Groundedness',
-    weight: '30%',
-    hint: 'Share of answer sentences whose content words appear in the retrieved context',
-  },
-  {
-    key: 'meanScore',
-    label: 'Mean chunk',
-    weight: '15%',
-    hint: 'Average score across the chunks sent to the model',
-  },
-  {
-    key: 'retrievalAgreement',
-    label: 'Arm agreement',
-    weight: '10%',
-    hint: 'Overlap between what dense search and keyword search independently found',
-  },
-  {
-    key: 'contextCoverage',
-    label: 'Query coverage',
-    weight: '10%',
-    hint: 'How much of the question’s vocabulary appears in the context',
-  },
+/**
+ * Per-factor explanations. The labels and weights themselves come from
+ * `CONFIDENCE_WEIGHTS` in shared, so this panel can never describe a different
+ * blend from the one the server actually computed.
+ */
+const FACTOR_HINTS: Record<ConfidenceFactorKey, string> = {
+  topScore: 'Best dense cosine similarity between the query and retrieved context',
+  groundedness: 'Share of answer sentences whose content words appear in the retrieved context',
+  meanScore: 'Average dense cosine similarity across the chunks sent to the model',
+  retrievalAgreement: 'Overlap between what dense search and keyword search independently found',
+  contextCoverage: 'How much of the question’s vocabulary appears in the context',
+};
+
+const SEGMENT_COLORS = [
+  'rgb(var(--brand))',
+  'rgb(var(--accent))',
+  'rgb(var(--brand) / 0.65)',
+  'rgb(var(--accent) / 0.65)',
+  'rgb(var(--brand) / 0.3)',
 ];
 
+/** A factor's value, what it contributed, and what it left on the table. */
+interface FactorRow {
+  key: ConfidenceFactorKey;
+  label: string;
+  weight: number;
+  value: number;
+  /** weight × value — the points this factor actually added to `overall`. */
+  contribution: number;
+  /** weight − contribution — the points it could have added but didn't. */
+  shortfall: number;
+}
+
+function factorRows(confidence: ConfidenceBreakdown): FactorRow[] {
+  return CONFIDENCE_WEIGHTS.map(({ key, label, weight }) => {
+    const value = confidence[key];
+    const contribution = weight * value;
+    return { key, label, weight, value, contribution, shortfall: weight - contribution };
+  });
+}
+
 export function ConfidencePanel({ confidence }: { confidence: ConfidenceBreakdown | null }) {
+  const rows = confidence ? factorRows(confidence) : [];
+  // The single factor costing the most points. Naming it turns the panel from
+  // "here are five numbers" into "here is why the score isn't higher".
+  const worst = rows.reduce<FactorRow | null>(
+    (lowest, row) => (!lowest || row.shortfall > lowest.shortfall ? row : lowest),
+    null,
+  );
+  const headroom = confidence ? confidence.overall - confidence.threshold : 0;
+
   return (
     <Card>
       <CardHeader
@@ -141,7 +159,11 @@ export function ConfidencePanel({ confidence }: { confidence: ConfidenceBreakdow
         icon={Gauge}
         description={
           confidence
-            ? `Threshold ${formatPercent(confidence.threshold)} · ${confidence.sufficient ? 'cleared' : 'not met'}`
+            ? `Threshold ${formatPercent(confidence.threshold)} · ${
+                confidence.sufficient
+                  ? `cleared by ${(headroom * 100).toFixed(1)} pts`
+                  : `short by ${(-headroom * 100).toFixed(1)} pts`
+              }`
             : 'Weighted blend of retrieval and grounding signals'
         }
         action={
@@ -167,31 +189,99 @@ export function ConfidencePanel({ confidence }: { confidence: ConfidenceBreakdow
                   {formatPercent(confidence.overall, 1)}
                 </span>
               </div>
-              {/* Spectrum, not the verdict tone: whether the threshold cleared
-                  is already stated twice above (badge + header description),
-                  so the bar is free to report the magnitude instead. */}
-              <Meter value={confidence.overall} />
+
+              {/*
+                Stacked by contribution rather than a single fill, because the
+                thing worth seeing is *where the score came from*. Each segment
+                is weight × value, so the segments sum to exactly `overall` and
+                the empty remainder is the score that was available but not
+                earned. A flat bar shows the same total while hiding that a
+                third of it is groundedness alone.
+              */}
+              <div
+                className="relative flex h-2 w-full overflow-hidden rounded-full bg-border/50"
+                role="img"
+                aria-label={`Confidence ${formatPercent(confidence.overall, 1)}, threshold ${formatPercent(confidence.threshold)}`}
+              >
+                {rows.map((row, index) => (
+                  <Tooltip
+                    key={row.key}
+                    side="top"
+                    content={`${row.label} contributed ${(row.contribution * 100).toFixed(1)} of a possible ${(row.weight * 100).toFixed(0)} pts`}
+                  >
+                    <span
+                      className="h-full border-r border-card/70 last:border-r-0"
+                      style={{
+                        width: `${row.contribution * 100}%`,
+                        backgroundColor: SEGMENT_COLORS[index] ?? 'rgb(var(--ink))',
+                      }}
+                    />
+                  </Tooltip>
+                ))}
+                {/* Threshold marker — turns "cleared" from a claim into
+                    something you can see the margin of. */}
+                <span
+                  className="absolute top-0 h-full w-px bg-danger"
+                  style={{ left: `${confidence.threshold * 100}%` }}
+                  aria-hidden
+                />
+              </div>
             </div>
 
             <div className="space-y-2 border-t border-border pt-2">
-              {CONFIDENCE_FACTORS.map((factor) => {
-                const value = confidence[factor.key] as number;
-                return (
-                  <Tooltip key={factor.key} content={factor.hint} side="left">
-                    <div>
-                      <div className="flex items-baseline justify-between gap-2">
-                        <span className="text-2xs text-ink-secondary">
-                          {factor.label}
-                          <span className="ml-1 text-ink-tertiary">{factor.weight}</span>
+              {rows.map((row, index) => (
+                <Tooltip key={row.key} content={FACTOR_HINTS[row.key]} side="left">
+                  <div>
+                    <div className="flex items-baseline justify-between gap-2">
+                      <span className="flex min-w-0 items-baseline gap-1.5">
+                        {/* Swatch ties the row to its segment above — the only
+                            thing making the stacked bar readable. */}
+                        <span
+                          className="size-1.5 shrink-0 translate-y-px rounded-full"
+                          style={{
+                            backgroundColor: SEGMENT_COLORS[index] ?? 'rgb(var(--ink))',
+                          }}
+                          aria-hidden
+                        />
+                        <span className="truncate text-2xs text-ink-secondary">{row.label}</span>
+                      </span>
+                      <span className="shrink-0 font-mono text-2xs tabular-nums">
+                        <span className="text-ink">{row.value.toFixed(3)}</span>
+                        <span className="text-ink-tertiary">
+                          {' '}
+                          → {(row.contribution * 100).toFixed(1)}/{(row.weight * 100).toFixed(0)}
                         </span>
-                        <span className="font-mono text-2xs text-ink">{value.toFixed(3)}</span>
-                      </div>
-                      <Meter value={value} className="mt-1 h-1" />
+                      </span>
                     </div>
-                  </Tooltip>
-                );
-              })}
+                    {/*
+                      Scaled to this factor's weight, not to 0-1. A 10%-weight
+                      factor can never fill more than a tenth of the track, so
+                      bar lengths are comparable across rows as contributions —
+                      which is what the overall score is made of. Drawn on 0-1
+                      instead, arm agreement's 0.143 looked like a catastrophe
+                      when it costs 8.6 points out of 100.
+                    */}
+                    <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-border/40">
+                      <div
+                        className="h-full rounded-full transition-[width] duration-300"
+                        style={{
+                          width: `${row.contribution * 100}%`,
+                          backgroundColor: SEGMENT_COLORS[index] ?? 'rgb(var(--ink))',
+                        }}
+                      />
+                    </div>
+                  </div>
+                </Tooltip>
+              ))}
             </div>
+
+            {worst && worst.shortfall > 0.02 ? (
+              <p className="border-t border-border pt-2 text-2xs leading-relaxed text-ink-secondary">
+                Biggest drag: <span className="text-ink">{worst.label}</span> gave up{' '}
+                <span className="font-mono">{(worst.shortfall * 100).toFixed(1)}</span> of its{' '}
+                <span className="font-mono">{(worst.weight * 100).toFixed(0)}</span> points.
+              </p>
+            ) : null}
           </>
         )}
       </CardContent>

@@ -52,6 +52,7 @@ export function recordRequest(input: RecordInput): void {
     status: input.status,
     confidence: input.confidence,
     totalLatencyMs: Math.round(input.latency.total),
+    retrievalPathMs: Math.round(retrievalPathMs(input.latency) * 100) / 100,
     chunkCount: input.chunkCount,
     tokensUsed: input.usage.totalTokens,
     voice: input.voice,
@@ -126,8 +127,31 @@ function stageStats(): StageLatencyStats {
     reranking: percentiles(pick((l) => l.reranking)),
     generation: percentiles(pick((l) => l.generation)),
     transcription: percentiles(pick((l) => l.transcription)),
+    // The 50ms-budget window: query text in → ranked context out. Excludes
+    // transcription (upstream of the pipeline, and a network call to a vendor)
+    // and generation (bounded by the LLM, not by anything here).
+    retrievalPath: percentiles(requests.map((request) => retrievalPathMs(request.latency))),
     total: percentiles(pick((l) => l.total)),
   };
+}
+
+/**
+ * Sum the stages the latency budget covers.
+ *
+ * The two retrieval arms are genuinely concurrent, so their cost is the slower
+ * one, not the sum — adding them would over-report by roughly the sparse arm
+ * on every request.
+ */
+export function retrievalPathMs(latency: LatencyBreakdown): number {
+  return (
+    latency.guardrailsPre +
+    latency.embedding +
+    Math.max(latency.denseRetrieval, latency.sparseRetrieval) +
+    latency.fusion +
+    latency.diversity +
+    latency.reranking +
+    latency.expansion
+  );
 }
 
 /** Requests bucketed by hour, oldest first. */

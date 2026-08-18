@@ -146,6 +146,14 @@ export const statsQuerySchema = z
   })
   .strip();
 
+/** `GET /api/dataset/suggestions` */
+export const datasetSuggestionsQuerySchema = z
+  .object({
+    /** How many starter chips to return. */
+    count: z.coerce.number().int().min(1).max(10).default(2),
+  })
+  .strip();
+
 /** `GET /api/chunks/:id` style lookup for the inspector. */
 export const chunkLookupSchema = z
   .object({
@@ -160,4 +168,5 @@ export type VoiceQueryOptions = z.infer<typeof voiceQueryOptionsSchema>;
 export type SpeakRequest = z.infer<typeof speakRequestSchema>;
 export type BenchmarkQuery = z.infer<typeof benchmarkQuerySchema>;
 export type StatsQuery = z.infer<typeof statsQuerySchema>;
+export type DatasetSuggestionsQuery = z.infer<typeof datasetSuggestionsQuerySchema>;
 export type ConversationTurnInput = z.infer<typeof conversationTurnSchema>;

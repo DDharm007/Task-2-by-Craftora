@@ -113,3 +113,16 @@ export function themeColor(token: string, fallback = '#111827'): string {
   const value = getComputedStyle(document.documentElement).getPropertyValue(`--${token}`).trim();
   return value ? `rgb(${value.replace(/\s+/g, ' ')})` : fallback;
 }
+
+/**
+ * Same token lookup as {@link themeColor}, but as `#rrggbb`. Some colour
+ * consumers (ogl's `Color`, for one) parse hex/number/named strings but not
+ * `rgb()` — this is for those.
+ */
+export function themeColorHex(token: string, fallback = '#111827'): string {
+  if (typeof window === 'undefined') return fallback;
+  const value = getComputedStyle(document.documentElement).getPropertyValue(`--${token}`).trim();
+  const parts = value.split(/\s+/).map(Number);
+  if (parts.length !== 3 || parts.some((n) => !Number.isFinite(n))) return fallback;
+  return `#${parts.map((n) => Math.max(0, Math.min(255, n)).toString(16).padStart(2, '0')).join('')}`;
+}

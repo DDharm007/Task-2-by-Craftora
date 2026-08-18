@@ -331,6 +331,7 @@ export function AnswerPanel() {
 
         {answer ? (
           <div
+            lang={/[\u0900-\u097F]/.test(answer) ? 'hi' : undefined}
             className={cn(
               'text-sm leading-relaxed text-ink',
               isRefusal && 'text-ink-secondary',

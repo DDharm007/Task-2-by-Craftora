@@ -12,7 +12,12 @@
  *
  * Two sources, because the obvious one does not work:
  *
- *   parquet (default) — the repo stores one Parquet file per language
+ *   virtual (default) — the repo stores one Parquet file per language
+ *     (`validation/hinval.parquet` etc.). `hyparquet` reads the required HTTP
+ *     byte ranges directly from Hugging Face. The source file is never saved
+ *     locally.
+ *
+ *   parquet (legacy opt-in) — the repo stores one Parquet file per language
  *     (`validation/hinval.parquet` etc.). We download the file once, cache it
  *     under dataset/raw/, and decode only the first N rows. ~440MB per
  *     language, paid once.
@@ -24,7 +29,7 @@
  *     responds, and it caps out at ~18 rows. Useful as a smoke test, too small
  *     to benchmark against.
  *
- * Set DATASET_SOURCE to pick. `auto` tries parquet and falls back to the API.
+ * Set DATASET_SOURCE to pick. `auto` uses virtual reads and falls back to the API.
  */
 import { createWriteStream } from 'node:fs';
 import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
@@ -32,8 +37,16 @@ import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import path from 'node:path';
 import { downloadFile, listFiles } from '@huggingface/hub';
-import { asyncBufferFromFile, parquetMetadataAsync, parquetReadObjects } from 'hyparquet';
-import type { SourceDocument } from '@goarag/shared';
+import {
+  asyncBufferFromFile,
+  asyncBufferFromUrl,
+  cachedAsyncBuffer,
+  parquetMetadataAsync,
+  parquetReadObjects,
+} from 'hyparquet';
+import type { AsyncBuffer } from 'hyparquet';
+import type { ChunkMetadata, QuerySuggestion, SourceDocument } from '@goarag/shared';
+import { languageName } from '@goarag/shared';
 import { config } from '../config/env.js';
 import { logger } from '../utils/logger.js';
 import { retry, withTimeout } from '../utils/async.js';
@@ -290,10 +303,28 @@ async function ensureParquetFile(
   return destination;
 }
 
+/**
+ * Open a Parquet file as a remote, range-addressable buffer. Parquet readers
+ * first fetch the tiny footer and then only the columns/row groups requested;
+ * no source dataset file is created on the local filesystem.
+ */
+async function openVirtualParquet(remote: RepoFile): Promise<AsyncBuffer> {
+  const repo = config.dataset.repo.split('/').map(encodeURIComponent).join('/');
+  const remotePath = remote.path.split('/').map(encodeURIComponent).join('/');
+  const url = `https://huggingface.co/datasets/${repo}/resolve/main/${remotePath}`;
+  const file = await asyncBufferFromUrl({
+    url,
+    ...(remote.size > 0 ? { byteLength: remote.size } : {}),
+  });
+
+  // This cache is memory-only and is discarded at process exit. It prevents
+  // duplicate range requests while metadata and selected columns are decoded.
+  return cachedAsyncBuffer(file, { minSize: 1 << 20 });
+}
+
 /** Total rows in a Parquet file, read from its footer — cheap, no decode. */
-async function countParquetRows(filePath: string): Promise<number> {
+async function countParquetRows(file: AsyncBuffer): Promise<number> {
   try {
-    const file = await asyncBufferFromFile(filePath);
     const metadata = await parquetMetadataAsync(file);
     return Number(metadata.num_rows);
   } catch {
@@ -310,8 +341,7 @@ async function countParquetRows(filePath: string): Promise<number> {
  * ~2.4 GB of RSS per language. Only the columns actually used are requested,
  * which is the one lever that reduces it.
  */
-async function readParquetRows(filePath: string, limit: number): Promise<RawRow[]> {
-  const file = await asyncBufferFromFile(filePath);
+async function readParquetRows(file: AsyncBuffer, limit: number): Promise<RawRow[]> {
   const rows = (await parquetReadObjects({
     file,
     rowStart: 0,
@@ -434,7 +464,7 @@ export async function downloadDataset(options: DownloadOptions = {}): Promise<Da
     config.dataset.languages.length > 0 ? config.dataset.languages : SUPPORTED_DATASET_LANGUAGES;
   const source = config.dataset.source;
 
-  if (!options.force) {
+  if (config.dataset.persistBundle && !options.force) {
     const cached = await loadDataset().catch(() => null);
     if (cached && cached.records.length > 0) {
       const stale = cacheMismatch(cached, { wanted, languages });
@@ -462,7 +492,7 @@ export async function downloadDataset(options: DownloadOptions = {}): Promise<Da
   let totalAvailable = 0;
   const failedLanguages: Array<{ language: string; error: string }> = [];
 
-  if (source === 'parquet' || source === 'auto') {
+  if (source === 'virtual' || source === 'parquet' || source === 'auto') {
     const perLanguage = Math.max(1, Math.ceil(wanted / languages.length));
 
     for (const language of languages) {
@@ -472,19 +502,22 @@ export async function downloadDataset(options: DownloadOptions = {}): Promise<Da
       // drops on the eighth of fourteen ~450 MB downloads, must not discard
       // the languages that already succeeded.
       try {
-        let lastPercent = -1;
-        const file = await ensureParquetFile(language, (received, total) => {
-          if (total <= 0) return;
-          const percent = Math.floor((received / total) * 100);
-          if (percent !== lastPercent && percent % 5 === 0) {
-            lastPercent = percent;
-            report(
-              `Downloading ${language}: ${percent}% (${(received / 1048576).toFixed(0)}/${(total / 1048576).toFixed(0)} MB)`,
-            );
-          }
-        });
+        const remote = await resolveParquetFile(language, config.dataset.split);
+        const file =
+          source === 'parquet'
+            ? await asyncBufferFromFile(await ensureParquetFile(language, (received, total) => {
+                if (total <= 0) return;
+                report(
+                  `Downloading ${language}: ${Math.floor((received / total) * 100)}% (${(received / 1048576).toFixed(0)}/${(total / 1048576).toFixed(0)} MB)`,
+                );
+              }))
+            : await openVirtualParquet(remote);
 
-        report(`Decoding ${language} (${perLanguage} rows)`);
+        report(
+          source === 'parquet'
+            ? `Decoding ${language} (${perLanguage} rows)`
+            : `Reading ${language} remotely (${perLanguage} rows; no source file saved)`,
+        );
         totalAvailable += await countParquetRows(file);
 
         const rows = await readParquetRows(file, perLanguage);
@@ -535,7 +568,7 @@ export async function downloadDataset(options: DownloadOptions = {}): Promise<Da
 
   if (records.length === 0) {
     throw new Error(
-      'Could not load any dataset rows. Check the network, or set DATASET_SOURCE=parquet with DATASET_LANGUAGES.',
+      'Could not load any dataset rows. Check the network, or use DATASET_SOURCE=virtual with DATASET_LANGUAGES.',
     );
   }
 
@@ -560,13 +593,15 @@ export async function downloadDataset(options: DownloadOptions = {}): Promise<Da
     );
   }
 
-  await mkdir(path.dirname(destination), { recursive: true });
-  await writeFile(destination, JSON.stringify(bundle), 'utf8');
+  if (config.dataset.persistBundle) {
+    await mkdir(path.dirname(destination), { recursive: true });
+    await writeFile(destination, JSON.stringify(bundle), 'utf8');
+  }
 
   const passageCount = records.reduce((sum, record) => sum + record.passages.length, 0);
   logger.info(
-    { records: records.length, passages: passageCount, file: destination },
-    'Dataset downloaded',
+    { records: records.length, passages: passageCount, persisted: config.dataset.persistBundle, file: destination },
+    config.dataset.persistBundle ? 'Dataset downloaded and cached' : 'Dataset loaded virtually',
   );
 
   return bundle;
@@ -650,6 +685,154 @@ export interface EvaluationCase {
   language: string;
   expectedDocumentIds: string[];
   answer: string;
+}
+
+/**
+ * Build the evaluation set from the *index* rather than from the dataset.
+ *
+ * Chunk metadata already carries `queryId`, `queryText` and `isSelected` — the
+ * three fields a labelled case needs — because the indexer copies them from
+ * the source documents. Reconstructing cases from there rather than
+ * re-downloading MSMARCO-XI buys two things:
+ *
+ *   1. **Reproducibility.** The benchmark scores against exactly what is in
+ *      the index. Re-downloading can (and here, does) drop languages when a
+ *      HuggingFace stream is terminated mid-fetch, which silently changes the
+ *      denominator between runs and makes two benchmarks incomparable.
+ *   2. **It works offline.** No network in the measurement path at all.
+ *
+ * A query whose relevant passages were never indexed is dropped rather than
+ * counted as a miss — scoring recall against documents the retriever was never
+ * given would report a retrieval failure that is really an indexing gap.
+ */
+export function evaluationCasesFromIndex(
+  chunks: ReadonlyArray<{ metadata: ChunkMetadata }>,
+): EvaluationCase[] {
+  const byQuery = new Map<
+    string,
+    { query: string; language: string; documentIds: Set<string> }
+  >();
+
+  for (const { metadata } of chunks) {
+    const queryId = metadata.queryId;
+    if (!queryId || !metadata.isSelected) continue;
+
+    const existing = byQuery.get(queryId);
+    if (existing) {
+      existing.documentIds.add(metadata.documentId);
+      continue;
+    }
+    byQuery.set(queryId, {
+      query: metadata.queryText ?? metadata.topic ?? '',
+      language: metadata.language,
+      documentIds: new Set([metadata.documentId]),
+    });
+  }
+
+  const cases: EvaluationCase[] = [];
+  for (const [queryId, entry] of byQuery) {
+    if (!entry.query.trim()) continue;
+    cases.push({
+      queryId,
+      query: entry.query,
+      englishQuery: entry.query,
+      language: entry.language,
+      expectedDocumentIds: [...entry.documentIds],
+      answer: '',
+    });
+  }
+
+  // Stable order so `sample()`'s fixed stride picks the same queries every run.
+  return cases.sort((a, b) => a.queryId.localeCompare(b.queryId));
+}
+
+/** A chip's worth of text won't fit if it's the corpus's degenerate outlier. */
+const MAX_SUGGESTION_CHARS = 140;
+
+/** queryId → language → question text, the shape {@link pickSuggestions} samples from. */
+export type SuggestionIndex = Map<string, Map<string, string>>;
+
+/**
+ * Group indexed chunks by question, for Console's starter chips.
+ *
+ * Every chunk's `queryId` + `language` + `queryText` is enough to reconstruct
+ * "this question, asked in these languages" without touching the dataset
+ * again — the same trick `evaluationCasesFromIndex` uses, applied to a
+ * different consumer. Split from the sampling step below (rather than one
+ * function) because building this requires scanning every chunk in the index
+ * and picking from it doesn't — the caller scans once, caches the result, and
+ * calls {@link pickSuggestions} freely to get a different random set on every
+ * request without re-scanning.
+ */
+export function buildSuggestionIndex(
+  chunks: ReadonlyArray<{ metadata: ChunkMetadata }>,
+): SuggestionIndex {
+  const byQuery: SuggestionIndex = new Map();
+
+  for (const { metadata } of chunks) {
+    const queryId = metadata.queryId;
+    const text = (metadata.queryText ?? '').trim();
+    if (!queryId || !text || text.length > MAX_SUGGESTION_CHARS) continue;
+
+    const languages = byQuery.get(queryId) ?? new Map<string, string>();
+    if (!languages.has(metadata.language)) languages.set(metadata.language, text);
+    byQuery.set(queryId, languages);
+  }
+
+  return byQuery;
+}
+
+/**
+ * Sample Console's starter chips from a pre-built {@link SuggestionIndex}.
+ *
+ * One cross-lingual pair is prioritised — the same question in English and
+ * another language, the way the original hardcoded example demonstrated
+ * cross-lingual retrieval — and the rest are filled with distinct random
+ * questions, so the chips rotate on every request instead of asking the same
+ * three things forever.
+ */
+export function pickSuggestions(byQuery: SuggestionIndex, count: number): QuerySuggestion[] {
+  const noteFor = (language: string): string =>
+    language === 'eng_Latn' ? 'English' : languageName(language);
+
+  const suggestions: QuerySuggestion[] = [];
+  const usedQueryIds = new Set<string>();
+
+  // One cross-lingual pair first, picked from whichever queryIds actually
+  // have both an English and a non-English variant indexed.
+  const pairable = [...byQuery.entries()].filter(
+    ([, languages]) => languages.has('eng_Latn') && languages.size > 1,
+  );
+  if (pairable.length > 0 && count >= 2) {
+    const [queryId, languages] = pairable[Math.floor(Math.random() * pairable.length)] as [
+      string,
+      Map<string, string>,
+    ];
+    const english = languages.get('eng_Latn') as string;
+    const other = [...languages.entries()].find(([language]) => language !== 'eng_Latn') as [
+      string,
+      string,
+    ];
+    suggestions.push({ text: english, language: 'eng_Latn', note: 'English' });
+    suggestions.push({ text: other[1], language: other[0], note: `${noteFor(other[0])} — same question` });
+    usedQueryIds.add(queryId);
+  }
+
+  // Fill the rest with distinct random single questions.
+  const remaining = [...byQuery.entries()].filter(([queryId]) => !usedQueryIds.has(queryId));
+  for (let i = remaining.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [remaining[i], remaining[j]] = [remaining[j] as (typeof remaining)[number], remaining[i] as (typeof remaining)[number]];
+  }
+  for (const [, languages] of remaining) {
+    if (suggestions.length >= count) break;
+    const [language, text] = [...languages.entries()][
+      Math.floor(Math.random() * languages.size)
+    ] as [string, string];
+    suggestions.push({ text, language, note: noteFor(language) });
+  }
+
+  return suggestions.slice(0, count);
 }
 
 export function toEvaluationCases(bundle: DatasetBundle): EvaluationCase[] {
